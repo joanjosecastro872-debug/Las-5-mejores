@@ -95,26 +95,24 @@ LIGAS_EQUIPOS = {
 }
 
 # ==========================================
-# 2. BASE DE DATOS Y MEMORIA JSON
+# 2. BASE DE DATOS Y MEMORIA JSON BLINDADA
 # ==========================================
-def inicializar_liga_vacia(equipos):
-    tabla = {}
-    for eq in equipos:
-        tabla[eq] = {
-            "PJ": 0, "PG": 0, "PE": 0, "PP": 0, "GF": 0, "GC": 0, "DG": 0, "Pts": 0,
-            "PJ_L": 0, "PG_L": 0, "PE_L": 0, "PP_L": 0, "GF_L": 0, "GC_L": 0, "DG_L": 0, "Pts_L": 0,
-            "PJ_V": 0, "PG_V": 0, "PE_V": 0, "PP_V": 0, "GF_V": 0, "GC_V": 0, "DG_V": 0, "Pts_V": 0,
-            "Racha": []
-        }
-    return {"tabla": tabla, "historial": []}
-
-def cargar_base_datos():
-    keys_requeridas = {
+def obtener_estructura_equipo():
+    return {
         "PJ": 0, "PG": 0, "PE": 0, "PP": 0, "GF": 0, "GC": 0, "DG": 0, "Pts": 0,
         "PJ_L": 0, "PG_L": 0, "PE_L": 0, "PP_L": 0, "GF_L": 0, "GC_L": 0, "DG_L": 0, "Pts_L": 0,
         "PJ_V": 0, "PG_V": 0, "PE_V": 0, "PP_V": 0, "GF_V": 0, "GC_V": 0, "DG_V": 0, "Pts_V": 0,
         "Racha": []
     }
+
+def inicializar_liga_vacia(equipos):
+    tabla = {}
+    for eq in equipos:
+        tabla[eq] = obtener_estructura_equipo()
+    return {"tabla": tabla, "historial": []}
+
+def cargar_base_datos():
+    keys_requeridas = obtener_estructura_equipo()
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
@@ -123,6 +121,11 @@ def cargar_base_datos():
                     if liga not in data:
                         data[liga] = inicializar_liga_vacia(LIGAS_EQUIPOS[liga])
                     else:
+                        if "tabla" not in data[liga]:
+                            data[liga]["tabla"] = {}
+                        if "historial" not in data[liga]:
+                            data[liga]["historial"] = []
+                            
                         for eq in LIGAS_EQUIPOS[liga]:
                             if eq not in data[liga]["tabla"]:
                                 data[liga]["tabla"][eq] = keys_requeridas.copy()
@@ -252,27 +255,27 @@ with tab_reg_directo:
         st.markdown("### 🏠 Rendimiento como LOCAL")
         col_l1, col_l2, col_l3 = st.columns(3)
         with col_l1:
-            pj_l = st.number_input("PJ Local", min_value=0, value=int(tabla_actual[equipo_sel]["PJ_L"]), step=1)
-            pg_l = st.number_input("PG Local", min_value=0, value=int(tabla_actual[equipo_sel]["PG_L"]), step=1)
+            pj_l = st.number_input("PJ Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PJ_L", 0)), step=1)
+            pg_l = st.number_input("PG Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PG_L", 0)), step=1)
         with col_l2:
-            pe_l = st.number_input("PE Local", min_value=0, value=int(tabla_actual[equipo_sel]["PE_L"]), step=1)
-            pp_l = st.number_input("PP Local", min_value=0, value=int(tabla_actual[equipo_sel]["PP_L"]), step=1)
+            pe_l = st.number_input("PE Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PE_L", 0)), step=1)
+            pp_l = st.number_input("PP Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PP_L", 0)), step=1)
         with col_l3:
-            gf_l = st.number_input("GF Local", min_value=0, value=int(tabla_actual[equipo_sel]["GF_L"]), step=1)
-            gc_l = st.number_input("GC Local", min_value=0, value=int(tabla_actual[equipo_sel]["GC_L"]), step=1)
+            gf_l = st.number_input("GF Local", min_value=0, value=int(tabla_actual[equipo_sel].get("GF_L", 0)), step=1)
+            gc_l = st.number_input("GC Local", min_value=0, value=int(tabla_actual[equipo_sel].get("GC_L", 0)), step=1)
 
         st.markdown("---")
         st.markdown("### ✈️ Rendimiento como VISITANTE")
         col_v1, col_v2, col_v3 = st.columns(3)
         with col_v1:
-            pj_v = st.number_input("PJ Visitante", min_value=0, value=int(tabla_actual[equipo_sel]["PJ_V"]), step=1)
-            pg_v = st.number_input("PG Visitante", min_value=0, value=int(tabla_actual[equipo_sel]["PG_V"]), step=1)
+            pj_v = st.number_input("PJ Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("PJ_V", 0)), step=1)
+            pg_v = st.number_input("PG Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("PG_V", 0)), step=1)
         with col_v2:
-            pe_v = st.number_input("PE Visitante", min_value=0, value=int(tabla_actual[equipo_sel]["PE_V"]), step=1)
-            pp_v = st.number_input("PP Visitante", min_value=0, value=int(tabla_actual[equipo_sel]["PP_V"]), step=1)
+            pe_v = st.number_input("PE Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("PE_V", 0)), step=1)
+            pp_v = st.number_input("PP Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("PP_V", 0)), step=1)
         with col_v3:
-            gf_v = st.number_input("GF Visitante", min_value=0, value=int(tabla_actual[equipo_sel]["GF_V"]), step=1)
-            gc_v = st.number_input("GC Visitante", min_value=0, value=int(tabla_actual[equipo_sel]["GC_V"]), step=1)
+            gf_v = st.number_input("GF Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("GF_V", 0)), step=1)
+            gc_v = st.number_input("GC Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("GC_V", 0)), step=1)
 
         btn_guardar_directo = st.form_submit_button("Guardar Estadísticas del Equipo")
 
@@ -317,7 +320,6 @@ with tab_reg_directo:
 with tab_tabla:
     st.subheader("Clasificación de la Liga")
     
-    # Selector de tipo de tabla
     tipo_tabla = st.radio(
         "Ver tabla por:",
         ["🌐 General", "🏠 Solo Local", "✈️ Solo Visitante"],
@@ -358,7 +360,11 @@ with tab_hist:
     historial = db_data[liga_seleccionada]["historial"]
     if historial:
         for match in historial[:15]:
-            st.markdown(f"- **{match['local']}** {match['goles_local']} - {match['goles_visitante']} **{match['visitante']}** ({match['resultado']})")
+            l = match.get('local', 'Local')
+            gl = match.get('goles_local', 0)
+            gv = match.get('goles_visitante', 0)
+            v = match.get('visitante', 'Visitante')
+            res = match.get('resultado', '')
+            st.markdown(f"- **{l}** {gl} - {gv} **{v}** ({res})")
     else:
         st.info("No hay historial registrado todavía.")
-
