@@ -109,6 +109,12 @@ def inicializar_liga_vacia(equipos):
     return {"tabla": tabla, "historial": []}
 
 def cargar_base_datos():
+    keys_requeridas = {
+        "PJ": 0, "PG": 0, "PE": 0, "PP": 0, "GF": 0, "GC": 0, "DG": 0, "Pts": 0,
+        "PJ_L": 0, "PG_L": 0, "PE_L": 0, "PP_L": 0, "GF_L": 0, "GC_L": 0, "DG_L": 0, "Pts_L": 0,
+        "PJ_V": 0, "PG_V": 0, "PE_V": 0, "PP_V": 0, "GF_V": 0, "GC_V": 0, "DG_V": 0, "Pts_V": 0,
+        "Racha": []
+    }
     if os.path.exists(DB_FILE):
         try:
             with open(DB_FILE, "r", encoding="utf-8") as f:
@@ -119,12 +125,11 @@ def cargar_base_datos():
                     else:
                         for eq in LIGAS_EQUIPOS[liga]:
                             if eq not in data[liga]["tabla"]:
-                                data[liga]["tabla"][eq] = {
-                                    "PJ": 0, "PG": 0, "PE": 0, "PP": 0, "GF": 0, "GC": 0, "DG": 0, "Pts": 0,
-                                    "PJ_L": 0, "PG_L": 0, "PE_L": 0, "PP_L": 0, "GF_L": 0, "GC_L": 0, "DG_L": 0, "Pts_L": 0,
-                                    "PJ_V": 0, "PG_V": 0, "PE_V": 0, "PP_V": 0, "GF_V": 0, "GC_V": 0, "DG_V": 0, "Pts_V": 0,
-                                    "Racha": []
-                                }
+                                data[liga]["tabla"][eq] = keys_requeridas.copy()
+                            else:
+                                for k, v in keys_requeridas.items():
+                                    if k not in data[liga]["tabla"][eq]:
+                                        data[liga]["tabla"][eq][k] = v
                 return data
         except Exception:
             pass
