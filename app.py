@@ -277,7 +277,7 @@ with tab_reg_directo:
             pp_l = st.number_input("PP Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PP_L", 0)), step=1)
         with col_l3:
             gf_l = st.number_input("GF Local", min_value=0, value=int(tabla_actual[equipo_sel].get("GF_L", 0)), step=1)
-            gc_l = st.number_input("GC Local", min_value=0, value=int(tabla_actual[equipo_sel]["GC_L"], 0), step=1)
+            gc_l = st.number_input("GC Local", min_value=0, value=int(tabla_actual[equipo_sel].get("GC_L", 0)), step=1)
 
         st.markdown("---")
         st.markdown("### ✈️ Rendimiento como VISITANTE")
@@ -383,3 +383,4 @@ with tab_hist:
             st.markdown(f"- **{l}** {gl} - {gv} **{v}** ({res})")
     else:
         st.info("No hay historial registrado todavía.")
+
