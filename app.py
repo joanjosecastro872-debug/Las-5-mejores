@@ -1,7 +1,6 @@
 import streamlit as st
 import json
 import os
-import numpy as np
 import pandas as pd
 
 # ==========================================
@@ -47,7 +46,6 @@ st.markdown("""
 
 DB_FILE = "zohan_pronostic_db.json"
 
-# Listas Oficiales Verificadas
 LIGAS_EQUIPOS = {
     "🇪🇸 LaLiga": [
         "Athletic Club", "Atlético de Madrid", "CA Osasuna", "Celta de Vigo", 
@@ -154,7 +152,6 @@ db_data = cargar_base_datos()
 st.sidebar.title("⚙️ Zohan Panel")
 liga_seleccionada = st.sidebar.selectbox("Selecciona la Liga", list(LIGAS_EQUIPOS.keys()))
 
-# --- BOTONES DE RESETEO EN LA BARRA LATERAL ---
 st.sidebar.markdown("---")
 if st.sidebar.button("🗑️ Reiniciar Liga Actual a Ceros"):
     db_data[liga_seleccionada] = inicializar_liga_vacia(LIGAS_EQUIPOS[liga_seleccionada])
@@ -170,48 +167,50 @@ if st.sidebar.button("🔥 Reiniciar TODAS las Ligas"):
     st.rerun()
 
 equipos_liga = LIGAS_EQUIPOS[liga_seleccionada]
-tabla_actual = db_data[liga_seleccionada]["tabla"]
 
 st.title(f"⚽ Zohan Pronostic v2 - {liga_seleccionada}")
 
-tab_sim, tab_reg_directo, tab_tabla, tab_hist = st.tabs([
-    "🔮 Simular Partido", 
+tab_reg_partido, tab_reg_directo, tab_tabla, tab_hist = st.tabs([
+    "⚽ Registrar Partidos", 
     "📝 Registro Directo Equipo", 
     "📊 Tabla de Posiciones", 
     "📜 Historial"
 ])
 
-# --- PESTAÑA 1: SIMULAR PARTIDO ---
-with tab_sim:
-    st.subheader("Simulador de Enfrentamiento (Partido Individual)")
-    with st.form("form_simulacion"):
+# --- PESTAÑA 1: REGISTRAR PARTIDO (PARTIDO A PARTIDO) ---
+with tab_reg_partido:
+    st.subheader("Registro de Partidos Reales")
+    with st.form("form_partido_real", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
-            local = st.selectbox("Equipo Local", equipos_liga, index=0)
+            local = st.selectbox("Equipo Local", equipos_liga, index=0, key="real_local")
+            goles_local = st.number_input("Goles Local", min_value=0, value=0, step=1, key="real_gl")
         with col2:
-            visitante = st.selectbox("Equipo Visitante", equipos_liga, index=1 if len(equipos_liga) > 1 else 0)
+            visitante = st.selectbox("Equipo Visitante", equipos_liga, index=1 if len(equipos_liga) > 1 else 0, key="real_visitante")
+            goles_visitante = st.number_input("Goles Visitante", min_value=0, value=0, step=1, key="real_gv")
         
-        btn_simular = st.form_submit_button("Simular y Guardar Encuentro")
+        btn_guardar_partido = st.form_submit_button("Guardar Este Partido")
 
-    if btn_simular:
+    if btn_guardar_partido:
         if local == visitante:
-            st.warning("⚠️ El equipo local y visitante no pueden ser el mismo.")
+            st.error("⚠️ El equipo local y visitante no pueden ser el mismo.")
         else:
-            np.random.seed()
-            goles_local = np.random.poisson(1.5)
-            goles_visitante = np.random.poisson(1.1)
-            
-            st.success(f"Resultado Simulado: **{local} {goles_local} - {goles_visitante} {visitante}**")
-            
-            # Actualizar estadísticas Local
-            t_loc = tabla_actual[local]
+            db_data_fresh = cargar_base_datos()
+            tabla_liga = db_data_fresh[liga_seleccionada]["tabla"]
+
+            if local not in tabla_liga:
+                tabla_liga[local] = obtener_estructura_equipo()
+            if visitante not in tabla_liga:
+                tabla_liga[visitante] = obtener_estructura_equipo()
+
+            t_loc = tabla_liga[local]
+            t_vis = tabla_liga[visitante]
+
             t_loc["PJ_L"] += 1
             t_loc["GF_L"] += goles_local
             t_loc["GC_L"] += goles_visitante
             t_loc["DG_L"] = t_loc["GF_L"] - t_loc["GC_L"]
 
-            # Actualizar estadísticas Visitante
-            t_vis = tabla_actual[visitante]
             t_vis["PJ_V"] += 1
             t_vis["GF_V"] += goles_visitante
             t_vis["GC_V"] += goles_local
@@ -234,9 +233,8 @@ with tab_sim:
                 t_vis["Pts_V"] += 1
                 res_str = "Empate"
 
-            # Recalcular totales generales
             for eq_key in [local, visitante]:
-                e = tabla_actual[eq_key]
+                e = tabla_liga[eq_key]
                 e["PJ"] = e["PJ_L"] + e["PJ_V"]
                 e["PG"] = e["PG_L"] + e["PG_V"]
                 e["PE"] = e["PE_L"] + e["PE_V"]
@@ -246,8 +244,7 @@ with tab_sim:
                 e["DG"] = e["GF"] - e["GC"]
                 e["Pts"] = e["Pts_L"] + e["Pts_V"]
 
-            # Registrar en historial
-            db_data[liga_seleccionada]["historial"].insert(0, {
+            db_data_fresh[liga_seleccionada]["historial"].insert(0, {
                 "local": local,
                 "visitante": visitante,
                 "goles_local": goles_local,
@@ -255,49 +252,54 @@ with tab_sim:
                 "resultado": res_str
             })
             
-            guardar_base_datos(db_data)
-            st.rerun()
+            guardar_base_datos(db_data_fresh)
+            st.success(f"✅ ¡Guardado con éxito: **{local} {goles_local} - {goles_visitante} {visitante}**!")
 
-# --- PESTAÑA 2: REGISTRO DIRECTO DE EQUIPO (LOCAL Y VISITANTE) ---
+# --- PESTAÑA 2: REGISTRO DIRECTO POR EQUIPO (SIN FORMULARIOS PARA EVITAR ERRORES) ---
 with tab_reg_directo:
-    st.subheader("Registro Directo / Actualización de Equipo")
-    st.info("Ingresa los acumulados reales de la temporada divididos por condición (Local y Visitante).")
+    st.subheader("📝 Registro Directo por Acumulados (Ideal para Temporadas Avanzadas)")
+    st.info("Selecciona un equipo. Los datos se cargarán al instante; edítalos y guárdalos uno por uno de forma limpia y directa.")
 
-    with st.form("form_registro_directo"):
-        equipo_sel = st.selectbox("Selecciona el Equipo a Actualizar", equipos_liga)
+    # Carga fresca para la UI dinámica
+    db_data_dir = cargar_base_datos()
+    tabla_actual_dir = db_data_dir[liga_seleccionada]["tabla"]
+
+    equipo_sel = st.selectbox("Selecciona el Equipo a Configurar", equipos_liga, key="reg_equipo_sel")
+    
+    # Obtenemos los datos actuales exactos de ese equipo
+    datos_equipo_actual = tabla_actual_dir.get(equipo_sel, obtener_estructura_equipo())
+
+    st.markdown("---")
+    st.markdown(f"### 🏠 Rendimiento como LOCAL ({equipo_sel})")
+    col_l1, col_l2, col_l3 = st.columns(3)
+    with col_l1:
+        pj_l = st.number_input("PJ Local", min_value=0, value=int(datos_equipo_actual.get("PJ_L", 0)), step=1, key="val_pjl")
+        pg_l = st.number_input("PG Local", min_value=0, value=int(datos_equipo_actual.get("PG_L", 0)), step=1, key="val_pgl")
+    with col_l2:
+        pe_l = st.number_input("PE Local", min_value=0, value=int(datos_equipo_actual.get("PE_L", 0)), step=1, key="val_pel")
+        pp_l = st.number_input("PP Local", min_value=0, value=int(datos_equipo_actual.get("PP_L", 0)), step=1, key="val_ppl")
+    with col_l3:
+        gf_l = st.number_input("GF Local", min_value=0, value=int(datos_equipo_actual.get("GF_L", 0)), step=1, key="val_gfl")
+        gc_l = st.number_input("GC Local", min_value=0, value=int(datos_equipo_actual.get("GC_L", 0)), step=1, key="val_gcl")
+
+    st.markdown("---")
+    st.markdown(f"### ✈️ Rendimiento como VISITANTE ({equipo_sel})")
+    col_v1, col_v2, col_v3 = st.columns(3)
+    with col_v1:
+        pj_v = st.number_input("PJ Visitante", min_value=0, value=int(datos_equipo_actual.get("PJ_V", 0)), step=1, key="val_pjv")
+        pg_v = st.number_input("PG Visitante", min_value=0, value=int(datos_equipo_actual.get("PG_V", 0)), step=1, key="val_pgv")
+    with col_v2:
+        pe_v = st.number_input("PE Visitante", min_value=0, value=int(datos_equipo_actual.get("PE_V", 0)), step=1, key="val_pev")
+        pp_v = st.number_input("PP Visitante", min_value=0, value=int(datos_equipo_actual.get("PP_V", 0)), step=1, key="val_ppv")
+    with col_v3:
+        gf_v = st.number_input("GF Visitante", min_value=0, value=int(datos_equipo_actual.get("GF_V", 0)), step=1, key="val_gfv")
+        gc_v = st.number_input("GC Visitante", min_value=0, value=int(datos_equipo_actual.get("GC_V", 0)), step=1, key="val_gcv")
+
+    st.markdown("---")
+    if st.button(f"💾 Guardar Acumulados de {equipo_sel}", type="primary"):
+        db_data_save = cargar_base_datos()
+        eq_data = db_data_save[liga_seleccionada]["tabla"][equipo_sel]
         
-        st.markdown("---")
-        st.markdown("### 🏠 Rendimiento como LOCAL")
-        col_l1, col_l2, col_l3 = st.columns(3)
-        with col_l1:
-            pj_l = st.number_input("PJ Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PJ_L", 0)), step=1)
-            pg_l = st.number_input("PG Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PG_L", 0)), step=1)
-        with col_l2:
-            pe_l = st.number_input("PE Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PE_L", 0)), step=1)
-            pp_l = st.number_input("PP Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PP_L", 0)), step=1)
-        with col_l3:
-            gf_l = st.number_input("GF Local", min_value=0, value=int(tabla_actual[equipo_sel].get("GF_L", 0)), step=1)
-            gc_l = st.number_input("GC Local", min_value=0, value=int(tabla_actual[equipo_sel].get("GC_L", 0)), step=1)
-
-        st.markdown("---")
-        st.markdown("### ✈️ Rendimiento como VISITANTE")
-        col_v1, col_v2, col_v3 = st.columns(3)
-        with col_v1:
-            pj_v = st.number_input("PJ Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("PJ_V", 0)), step=1)
-            pg_v = st.number_input("PG Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("PG_V", 0)), step=1)
-        with col_v2:
-            pe_v = st.number_input("PE Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("PE_V", 0)), step=1)
-            pp_v = st.number_input("PP Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("PP_V", 0)), step=1)
-        with col_v3:
-            gf_v = st.number_input("GF Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("GF_V", 0)), step=1)
-            gc_v = st.number_input("GC Visitante", min_value=0, value=int(tabla_actual[equipo_sel].get("GC_V", 0)), step=1)
-
-        btn_guardar_directo = st.form_submit_button("Guardar Estadísticas del Equipo")
-
-    if btn_guardar_directo:
-        eq_data = tabla_actual[equipo_sel]
-        
-        # Asignar Local
         eq_data["PJ_L"] = pj_l
         eq_data["PG_L"] = pg_l
         eq_data["PE_L"] = pe_l
@@ -307,7 +309,6 @@ with tab_reg_directo:
         eq_data["DG_L"] = gf_l - gc_l
         eq_data["Pts_L"] = (pg_l * 3) + (pe_l * 1)
 
-        # Asignar Visitante
         eq_data["PJ_V"] = pj_v
         eq_data["PG_V"] = pg_v
         eq_data["PE_V"] = pe_v
@@ -317,7 +318,6 @@ with tab_reg_directo:
         eq_data["DG_V"] = gf_v - gc_v
         eq_data["Pts_V"] = (pg_v * 3) + (pe_v * 1)
 
-        # Calcular Totales Generales Automáticos
         eq_data["PJ"] = pj_l + pj_v
         eq_data["PG"] = pg_l + pg_v
         eq_data["PE"] = pe_l + pe_v
@@ -327,22 +327,25 @@ with tab_reg_directo:
         eq_data["DG"] = eq_data["GF"] - eq_data["GC"]
         eq_data["Pts"] = eq_data["Pts_L"] + eq_data["Pts_V"]
 
-        guardar_base_datos(db_data)
-        st.success(f"✅ ¡Estadísticas de **{equipo_sel}** actualizadas con éxito!")
+        guardar_base_datos(db_data_save)
+        st.success(f"✅ ¡Acumulados de **{equipo_sel}** actualizados y guardados correctamente en la tabla!")
         st.rerun()
 
-# --- PESTAÑA 3: TABLA DE POSICIONES (GENERAL, LOCAL, VISITANTE) ---
+# --- PESTAÑA 3: TABLA DE POSICIONES ---
 with tab_tabla:
     st.subheader("Clasificación de la Liga")
-    
+    db_tabla_view = cargar_base_datos()
+    tabla_actual_view = db_tabla_view[liga_seleccionada]["tabla"]
+
     tipo_tabla = st.radio(
         "Ver tabla por:",
         ["🌐 General", "🏠 Solo Local", "✈️ Solo Visitante"],
-        horizontal=True
+        horizontal=True,
+        key="radio_tipo_tabla"
     )
     
     lista_tabla = []
-    for eq, stats in tabla_actual.items():
+    for eq, stats in tabla_actual_view.items():
         row = {"Equipo": eq}
         row.update(stats)
         lista_tabla.append(row)
@@ -371,8 +374,9 @@ with tab_tabla:
 
 # --- PESTAÑA 4: HISTORIAL ---
 with tab_hist:
-    st.subheader("Historial de Partidos Simulados")
-    historial = db_data[liga_seleccionada]["historial"]
+    st.subheader("Historial de Partidos Registrados")
+    db_hist_view = cargar_base_datos()
+    historial = db_hist_view[liga_seleccionada]["historial"]
     if historial:
         for match in historial[:15]:
             l = match.get('local', 'Local')
