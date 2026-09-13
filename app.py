@@ -154,6 +154,21 @@ db_data = cargar_base_datos()
 st.sidebar.title("⚙️ Zohan Panel")
 liga_seleccionada = st.sidebar.selectbox("Selecciona la Liga", list(LIGAS_EQUIPOS.keys()))
 
+# --- BOTONES DE RESETEO EN LA BARRA LATERAL ---
+st.sidebar.markdown("---")
+if st.sidebar.button("🗑️ Reiniciar Liga Actual a Ceros"):
+    db_data[liga_seleccionada] = inicializar_liga_vacia(LIGAS_EQUIPOS[liga_seleccionada])
+    guardar_base_datos(db_data)
+    st.sidebar.success(f"¡Datos de {liga_seleccionada} borrados!")
+    st.rerun()
+
+if st.sidebar.button("🔥 Reiniciar TODAS las Ligas"):
+    for l in LIGAS_EQUIPOS.keys():
+        db_data[l] = inicializar_liga_vacia(LIGAS_EQUIPOS[l])
+    guardar_base_datos(db_data)
+    st.sidebar.success("¡Todas las ligas en ceros!")
+    st.rerun()
+
 equipos_liga = LIGAS_EQUIPOS[liga_seleccionada]
 tabla_actual = db_data[liga_seleccionada]["tabla"]
 
@@ -262,7 +277,7 @@ with tab_reg_directo:
             pp_l = st.number_input("PP Local", min_value=0, value=int(tabla_actual[equipo_sel].get("PP_L", 0)), step=1)
         with col_l3:
             gf_l = st.number_input("GF Local", min_value=0, value=int(tabla_actual[equipo_sel].get("GF_L", 0)), step=1)
-            gc_l = st.number_input("GC Local", min_value=0, value=int(tabla_actual[equipo_sel].get("GC_L", 0)), step=1)
+            gc_l = st.number_input("GC Local", min_value=0, value=int(tabla_actual[equipo_sel]["GC_L"], 0), step=1)
 
         st.markdown("---")
         st.markdown("### ✈️ Rendimiento como VISITANTE")
