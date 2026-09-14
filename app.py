@@ -3,6 +3,7 @@ import json
 import os
 import pandas as pd
 import math
+import random
 
 # ==========================================
 # 1. CONFIGURACIÓN BASE Y ESTILO MÓVIL
@@ -29,7 +30,6 @@ st.markdown("""
 
 DB_FILE = "zohan_pronostic_db.json"
 
-# Listas base de ligas y equipos
 LIGAS_EQUIPOS = {
     "🇪🇸 LaLiga": [
         "Athletic Club", "Atlético de Madrid", "CA Osasuna", "Celta de Vigo", 
@@ -77,7 +77,7 @@ LIGAS_EQUIPOS = {
 }
 
 # ==========================================
-# 2. GESTIÓN DE BASE DE DATOS JSON BLINDADA
+# 2. GESTIÓN DE BASE DE DATOS Y RESPALDO TXT
 # ==========================================
 def obtener_estructura_equipo():
     return {
@@ -125,7 +125,7 @@ def guardar_base_datos(data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 # ==========================================
-# 3. LÓGICA DE ACTUALIZACIÓN DE ESTADÍSTICAS
+# 3. ACTUALIZACIÓN DESDE LA TABLA
 # ==========================================
 def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
     factor = -1 if revertir else 1
@@ -143,7 +143,6 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
         pg_l, pe_l, pp_l = 0, 1, 0
         pg_v, pe_v, pp_v = 0, 1, 0
 
-    # Actualizar Local
     eq_l = tabla[local]
     eq_l["PJ"] += factor * 1
     eq_l["PG"] += factor * pg_l
@@ -163,7 +162,6 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
     eq_l["DG_L"] = eq_l["GF_L"] - eq_l["GC_L"]
     eq_l["Pts_L"] += factor * pts_l
 
-    # Actualizar Visitante
     eq_v = tabla[visitante]
     eq_v["PJ"] += factor * 1
     eq_v["PG"] += factor * pg_v
@@ -184,7 +182,7 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
     eq_v["Pts_V"] += factor * pts_v
 
 # ==========================================
-# 4. MOTOR DE ANÁLISIS Y POISSON
+# 4. MOTOR MATEMÁTICO 100% BASADO EN LA TABLA
 # ==========================================
 def calcular_metricas_equipo(eq_stats):
     pj = max(1, eq_stats["PJ"])
@@ -192,86 +190,86 @@ def calcular_metricas_equipo(eq_stats):
     pj_v = max(1, eq_stats["PJ_V"])
     
     return {
-        "prom_gf_general": eq_stats["GF"] / pj,
-        "prom_gc_general": eq_stats["GC"] / pj,
         "prom_gf_local": eq_stats["GF_L"] / pj_l,
         "prom_gc_local": eq_stats["GC_L"] / pj_l,
         "prom_gf_visitante": eq_stats["GF_V"] / pj_v,
         "prom_gc_visitante": eq_stats["GC_V"] / pj_v,
-        "rendimiento_general": (eq_stats["Pts"] / (pj * 3)) * 100,
-        "rendimiento_local": (eq_stats["Pts_L"] / (pj_l * 3)) * 100,
-        "rendimiento_visitante": (eq_stats["Pts_V"] / (pj_v * 3)) * 100
     }
 
-def calculate_poisson_matrix(home_data, away_data, max_goles=6):
-    mL = calcular_metricas_equipo(home_data)
-    mV = calcular_metricas_equipo(away_data)
+def motor_analisis_avanzado(stats_local, stats_visita, iteraciones_mc=10000):
+    mL = calcular_metricas_equipo(stats_local)
+    mV = calcular_metricas_equipo(stats_visita)
     
-    # xG esperado cruzando local/visitante y defensa general/específica
-    lambda_home = (mL["prom_gf_local"] + mV["prom_gc_visitante"]) / 2
-    lambda_away = (mV["prom_gf_visitante"] + mL["prom_gc_local"]) / 2
+    # 1. Lambda Poisson puro desde la tabla
+    lambda_home = max(0.2, (mL["prom_gf_local"] + mV["prom_gc_visitante"]) / 2)
+    lambda_away = max(0.2, (mV["prom_gf_visitante"] + mL["prom_gc_local"]) / 2)
 
-    # Asegurar valores mínimos lógicos para evitar ceros absolutos
-    lambda_home = max(0.2, lambda_home)
-    lambda_away = max(0.2, lambda_away)
-
-    matrix = []
-    for i in range(max_goles + 1):
-        row = []
-        prob_i = (lambda_home**i * math.exp(-lambda_home)) / math.factorial(i)
-        for j in range(max_goles + 1):
-            prob_j = (lambda_away**j * math.exp(-lambda_away)) / math.factorial(j)
-            row.append(prob_i * prob_j)
-        matrix.append(row)
+    # 2. Simulador de Montecarlo (10,000 iteraciones estocásticas)
+    wins_l, wins_v, draws = 0, 0, 0
+    conteo_scores = {}
+    
+    for _ in range(iteraciones_mc):
+        # Generar goles usando distribución de Poisson basada en los lambdas de la tabla
+        g_l = np_poisson_sim(lambda_home)
+        g_v = np_poisson_sim(lambda_away)
         
-    return matrix, round(lambda_home, 2), round(lambda_away, 2)
+        if g_l > g_v:
+            wins_l += 1
+        elif g_l < g_v:
+            wins_v += 1
+        else:
+            draws += 1
+            
+        score_key = (g_l, g_v)
+        conteo_scores[score_key] = conteo_scores.get(score_key, 0) + 1
 
-def generar_pronostico(stats_local, stats_visita):
-    matrix, xg_l, xg_v = calculate_poisson_matrix(stats_local, stats_visita)
-    
-    prob_local = 0.0
-    prob_empate = 0.0
-    prob_visita = 0.0
-    
-    exact_scores = []
+    p_local = (wins_l / iteraciones_mc) * 100
+    p_empate = (draws / iteraciones_mc) * 100
+    p_visita = (wins_v / iteraciones_mc) * 100
 
-    for i in range(len(matrix)):
-        for j in range(len(matrix[0])):
-            p = matrix[i][j]
-            if i > j:
-                prob_local += p
-            elif i < j:
-                prob_visita += p
-            else:
-                prob_empate += p
-            exact_scores.append((i, j, p))
+    # 3. Cuotas Justas (Fair Odds)
+    cuota_l = round(100 / max(0.1, p_local), 2)
+    cuota_e = round(100 / max(0.1, p_empate), 2)
+    cuota_v = round(100 / max(0.1, p_visita), 2)
 
-    # Normalizar porcentajes
-    total = prob_local + prob_empate + prob_visita
-    if total > 0:
-        prob_local = (prob_local / total) * 100
-        prob_empate = (prob_empate / total) * 100
-        prob_visita = (prob_visita / total) * 100
+    # 4. Retroceso Fibonacci aplicado a la dispersión de goles y umbrales de tendencia
+    xg_total = round(lambda_home + lambda_away, 2)
+    niveles_fib = [0.236, 0.382, 0.618]
+    umbral_fib = round(xg_total * (1 + niveles_fib[1]), 2) # Nivel analítico del 38.2%
 
-    # Ordenar marcadores más probables
-    exact_scores.sort(key=lambda x: x[2], reverse=True)
-    top_scores = exact_scores[:3]
+    # 5. Top Marcadores Exactos por Montecarlo
+    sorted_scores = sorted(conteo_scores.items(), key=lambda x: x[1], reverse=True)
+    top_scores = [(s[0][0], s[0][1], (s[1] / iteraciones_mc) * 100) for s in sorted_scores[:3]]
 
-    xg_total = xg_l + xg_v
-    ambos_marcan = "Sí" if (xg_l >= 0.95 and xg_v >= 0.95) else "No"
-    recomendacion_goles = "Más de 2.5" if xg_total > 2.6 else ("Menos de 2.5" if xg_total < 2.1 else "Línea 1.5 / 2.0")
+    # 6. Mercados
+    ambos_marcan = "Sí" if (lambda_home >= 0.95 and lambda_away >= 0.95) else "No"
+    rec_goles = "Más de 2.5" if xg_total > 2.6 else ("Menos de 2.5" if xg_total < 2.1 else "Línea 1.5 / 2.0")
 
     return {
-        "xg_local": xg_l,
-        "xg_visita": xg_v,
-        "xg_total": round(xg_total, 2),
-        "prob_local": round(prob_local, 1),
-        "prob_empate": round(prob_empate, 1),
-        "prob_visita": round(prob_visita, 1),
+        "xg_local": round(lambda_home, 2),
+        "xg_visita": round(lambda_away, 2),
+        "xg_total": xg_total,
+        "p_local": round(p_local, 1),
+        "p_empate": round(p_empate, 1),
+        "p_visita": round(p_visita, 1),
+        "cuota_l": cuota_l,
+        "cuota_e": cuota_e,
+        "cuota_v": cuota_v,
+        "umbral_fib": umbral_fib,
+        "top_scores": top_scores,
         "ambos_marcan": ambos_marcan,
-        "recomendacion_goles": recomendacion_goles,
-        "top_scores": top_scores
+        "rec_goles": rec_goles
     }
+
+def np_poisson_sim(lmbda):
+    # Generador nativo de Poisson sin librerías externas pesadas
+    L = math.exp(-lmbda)
+    k = 0
+    p = 1.0
+    while p > L:
+        k += 1
+        p *= random.random()
+    return k - 1
 
 # ==========================================
 # 5. INTERFAZ STREAMLIT DE USUARIO
@@ -281,22 +279,43 @@ db = cargar_base_datos()
 liga_seleccionada = st.sidebar.selectbox("⚽ Seleccionar Liga", list(LIGAS_EQUIPOS.keys()), key="select_liga_main")
 datos_liga = db[liga_seleccionada]
 
-# Creación de pestañas principales
+# --- BARRA LATERAL: RESPALDO TXT ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📱 Gestión de Archivo .TXT")
+db_string = json.dumps(db, ensure_ascii=False, indent=4)
+st.sidebar.download_button(
+    label="📥 Descargar Base de Datos (.TXT)",
+    data=db_string,
+    file_name="zohan_pronostic_db.txt",
+    mime="text/plain"
+)
+
+archivo_subido = st.sidebar.file_uploader("📤 Cargar Base de Datos (.TXT)", type=["txt"])
+if archivo_subido is not None:
+    try:
+        contenido_cargado = json.load(archivo_subido)
+        if isinstance(contenido_cargado, dict):
+            guardar_base_datos(contenido_cargado)
+            st.sidebar.success("¡Base de datos restaurada! Recarga la app.")
+            if st.sidebar.button("🔄 Recargar"):
+                st.rerun()
+    except Exception:
+        st.sidebar.error("Archivo .txt inválido.")
+
+# PESTAÑAS PRINCIPALES
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Tabla de Posiciones", 
-    "⚙️ Carga Directa (Liga Avanzada)", 
+    "⚙️ Carga Directa (Tabla)", 
     "📝 Registrar Match a Match", 
-    "🎯 Analizador de Pronósticos"
+    "🎯 Analizador Cuantitativo"
 ])
 
 # --- TAB 1: TABLA DE POSICIONES ---
 with tab1:
     st.header(f"Tabla de Posiciones - {liga_seleccionada}")
-    
-    filtro_vista = st.radio("Vista de Clasificación:", ["General", "Local", "Visitante"], horizontal=True, key="filtro_vista_tab1")
+    filtro_vista = st.radio("Vista de Clasificación:", ["General", "Local", "Visitante"], horizontal=True)
     
     df_tabla = pd.DataFrame.from_dict(datos_liga["tabla"], orient="index")
-    
     if filtro_vista == "General":
         columnas = ["PJ", "PG", "PE", "PP", "GF", "GC", "DG", "Pts"]
     elif filtro_vista == "Local":
@@ -307,39 +326,36 @@ with tab1:
     df_vista = df_tabla[columnas].copy()
     df_vista.columns = ["PJ", "PG", "PE", "PP", "GF", "GC", "DG", "Pts"]
     df_vista = df_vista.sort_values(by=["Pts", "DG", "GF"], ascending=False)
-    
     st.dataframe(df_vista, use_container_width=True)
 
-# --- TAB 2: PESTAÑA PARA CARGA DIRECTA DE LIGAS ADELANTADAS ---
+# --- TAB 2: CARGA DIRECTA DE LA TABLA (EQUIPOS) ---
 with tab2:
-    st.header("⚙️ Ingresar Estadísticas Acumuladas Directas")
-    st.info("Utiliza esta sección para poner al día la liga si ya está avanzada, sin tener que meter los partidos pasados uno por uno.")
+    st.header("⚙️ Configuración Directa de Estadísticas en la Tabla")
+    st.info("Introduce directamente las estadísticas acumuladas extraídas de la tabla para cada equipo, separadas por su rendimiento en casa y fuera.")
     
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
-    equipo_sel = st.selectbox("Selecciona un Equipo a Configurar:", equipos_disponibles, key="select_eq_carga_dir")
-    
+    equipo_sel = st.selectbox("Selecciona un Equipo:", equipos_disponibles, key="select_eq_carga_dir")
     datos_actuales = datos_liga["tabla"][equipo_sel]
     
     with st.form(key=f"form_carga_{equipo_sel}"):
-        col_loc, col_vis = st.columns(2)
-        
-        with col_loc:
-            st.markdown("### 🏠 Rendimiento en Casa (Local)")
-            pg_l = st.number_input("Partidos Ganados (Local)", min_value=0, value=int(datos_actuales["PG_L"]), key=f"pg_l_{equipo_sel}")
-            pe_l = st.number_input("Partidos Empatados (Local)", min_value=0, value=int(datos_actuales["PE_L"]), key=f"pe_l_{equipo_sel}")
-            pp_l = st.number_input("Partidos Perdidos (Local)", min_value=0, value=int(datos_actuales["PP_L"]), key=f"pp_l_{equipo_sel}")
-            gf_l = st.number_input("Goles a Favor (Local)", min_value=0, value=int(datos_actuales["GF_L"]), key=f"gf_l_{equipo_sel}")
-            gc_l = st.number_input("Goles en Contra (Local)", min_value=0, value=int(datos_actuales["GC_L"]), key=f"gc_l_{equipo_sel}")
+        col_l, col_vis = st.columns(2)
+        with col_l:
+            st.markdown("### 🏠 Rendimiento Local")
+            pg_l = st.number_input("Partidos Ganados (Local)", min_value=0, value=int(datos_actuales["PG_L"]))
+            pe_l = st.number_input("Partidos Empatados (Local)", min_value=0, value=int(datos_actuales["PE_L"]))
+            pp_l = st.number_input("Partidos Perdidos (Local)", min_value=0, value=int(datos_actuales["PP_L"]))
+            gf_l = st.number_input("Goles a Favor (Local)", min_value=0, value=int(datos_actuales["GF_L"]))
+            gc_l = st.number_input("Goles en Contra (Local)", min_value=0, value=int(datos_actuales["GC_L"]))
             
         with col_vis:
-            st.markdown("### ✈️ Rendimiento Fuera (Visitante)")
-            pg_v = st.number_input("Partidos Ganados (Visitante)", min_value=0, value=int(datos_actuales["PG_V"]), key=f"pg_v_{equipo_sel}")
-            pe_v = st.number_input("Partidos Empatados (Visitante)", min_value=0, value=int(datos_actuales["PE_V"]), key=f"pe_v_{equipo_sel}")
-            pp_v = st.number_input("Partidos Perdidos (Visitante)", min_value=0, value=int(datos_actuales["PP_V"]), key=f"pp_v_{equipo_sel}")
-            gf_v = st.number_input("Goles a Favor (Visitante)", min_value=0, value=int(datos_actuales["GF_V"]), key=f"gf_v_{equipo_sel}")
-            gc_v = st.number_input("Goles en Contra (Visitante)", min_value=0, value=int(datos_actuales["GC_V"]), key=f"gc_v_{equipo_sel}")
+            st.markdown("### ✈️ Rendimiento Visitante")
+            pg_v = st.number_input("Partidos Ganados (Visitante)", min_value=0, value=int(datos_actuales["PG_V"]))
+            pe_v = st.number_input("Partidos Empatados (Visitante)", min_value=0, value=int(datos_actuales["PE_V"]))
+            pp_v = st.number_input("Partidos Perdidos (Visitante)", min_value=0, value=int(datos_actuales["PP_V"]))
+            gf_v = st.number_input("Goles a Favor (Visitante)", min_value=0, value=int(datos_actuales["GF_V"]))
+            gc_v = st.number_input("Goles en Contra (Visitante)", min_value=0, value=int(datos_actuales["GC_V"]))
             
-        btn_actualizar = st.form_submit_button("💾 Guardar Datos del Equipo", type="primary")
+        btn_actualizar = st.form_submit_button("💾 Guardar en la Tabla", type="primary")
         
         if btn_actualizar:
             pj_l = pg_l + pe_l + pp_l
@@ -350,126 +366,106 @@ with tab2:
             pts_v = (pg_v * 3) + pe_v
             dg_v = gf_v - gc_v
             
-            pj_tot = pj_l + pj_v
-            pg_tot = pg_l + pg_v
-            pe_tot = pe_l + pe_v
-            pp_tot = pp_l + pp_v
-            gf_tot = gf_l + gf_v
-            gc_tot = gc_l + gc_v
-            dg_tot = gf_tot - gc_tot
-            pts_tot = pts_l + pts_v
-            
             datos_liga["tabla"][equipo_sel] = {
-                "PJ": pj_tot, "PG": pg_tot, "PE": pe_tot, "PP": pp_tot, "GF": gf_tot, "GC": gc_tot, "DG": dg_tot, "Pts": pts_tot,
+                "PJ": pj_l + pj_v, "PG": pg_l + pg_v, "PE": pe_l + pe_v, "PP": pp_l + pp_v,
+                "GF": gf_l + gf_v, "GC": gc_l + gc_v, "DG": dg_l + dg_v, "Pts": pts_l + pts_v,
                 "PJ_L": pj_l, "PG_L": pg_l, "PE_L": pe_l, "PP_L": pp_l, "GF_L": gf_l, "GC_L": gc_l, "DG_L": dg_l, "Pts_L": pts_l,
                 "PJ_V": pj_v, "PG_V": pg_v, "PE_V": pe_v, "PP_V": pp_v, "GF_V": gf_v, "GC_V": gc_v, "DG_V": dg_v, "Pts_V": pts_v
             }
-            
             guardar_base_datos(db)
-            st.success(f"¡Estadísticas de **{equipo_sel}** actualizadas correctamente!")
+            st.success(f"¡Tabla actualizada para **{equipo_sel}**!")
             st.rerun()
 
 # --- TAB 3: REGISTRAR PARTIDO A PARTIDO ---
 with tab3:
-    st.header("Registrar Partido Individual (Jornada a Jornada)")
-    
+    st.header("Registrar Partido (Impacto Automático en la Tabla)")
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     
-    with st.form(key="form_registrar_partido_individual"):
-        col_l, col_v = st.columns(2)
-        with col_l:
-            eq_local = st.selectbox("Equipo Local", equipos_disponibles, index=0, key="match_loc_ind")
-            goles_local = st.number_input("Goles Local", min_value=0, step=1, value=0, key="m_goles_l_ind")
-        with col_v:
-            idx_v = 1 if len(equipos_disponibles) > 1 else 0
-            eq_visita = st.selectbox("Equipo Visitante", equipos_disponibles, index=idx_v, key="match_vis_ind")
-            goles_visita = st.number_input("Goles Visitante", min_value=0, step=1, value=0, key="m_goles_v_ind")
+    with st.form(key="form_match"):
+        c1, c2 = st.columns(2)
+        with c1:
+            eq_l = st.selectbox("Local", equipos_disponibles, index=0)
+            gl = st.number_input("Goles Local", min_value=0, step=1, value=0)
+        with c2:
+            eq_v = st.selectbox("Visitante", equipos_disponibles, index=1 if len(equipos_disponibles)>1 else 0)
+            gv = st.number_input("Goles Visitante", min_value=0, step=1, value=0)
             
-        btn_partido = st.form_submit_button("⚽ Guardar Resultado de Match", type="primary")
-        
-        if btn_partido:
-            if eq_local == eq_visita:
-                st.error("El equipo local y visitante no pueden ser el mismo.")
+        if st.form_submit_button("⚽ Registrar y Actualizar Tabla", type="primary"):
+            if eq_l == eq_v:
+                st.error("El local y visitante deben ser distintos.")
             else:
-                aplicar_partido_a_tabla(datos_liga["tabla"], eq_local, eq_visita, goles_local, goles_visita)
-                reg = {
-                    "local": eq_local,
-                    "visitante": eq_visita,
-                    "goles_local": goles_local,
-                    "goles_visita": goles_visita
-                }
-                datos_liga["historial"].append(reg)
+                aplicar_partido_a_tabla(datos_liga["tabla"], eq_l, eq_v, gl, gv)
+                datos_liga["historial"].append({"local": eq_l, "visitante": eq_v, "goles_local": gl, "goles_visita": gv})
                 guardar_base_datos(db)
-                st.success(f"Registrado: {eq_local} {goles_local} - {goles_visita} {eq_visita}")
+                st.success("¡Partido registrado y tabla actualizada!")
                 st.rerun()
 
     st.markdown("---")
-    st.subheader("Historial de Partidos Registrados")
+    st.subheader("Historial de Partidos")
     if datos_liga["historial"]:
         for idx, p in enumerate(reversed(datos_liga["historial"])):
-            index_real = len(datos_liga["historial"]) - 1 - idx
-            c1, c2 = st.columns([4, 1])
-            with c1:
+            idx_real = len(datos_liga["historial"]) - 1 - idx
+            col_h1, col_h2 = st.columns([4, 1])
+            with col_h1:
                 st.write(f"**{p['local']}** {p['goles_local']} - {p['goles_visita']} **{p['visitante']}**")
-            with c2:
-                if st.button("Eliminar", key=f"del_partido_{index_real}"):
-                    partido_borrar = datos_liga["historial"].pop(index_real)
-                    aplicar_partido_a_tabla(
-                        datos_liga["tabla"], 
-                        partido_borrar["local"], 
-                        partido_borrar["visitante"], 
-                        partido_borrar["goles_local"], 
-                        partido_borrar["goles_visita"], 
-                        revertir=True
-                    )
+            with col_h2:
+                if st.button("Eliminar", key=f"del_{idx_real}"):
+                    pb = datos_liga["historial"].pop(idx_real)
+                    aplicar_partido_a_tabla(datos_liga["tabla"], pb["local"], pb["visitante"], pb["goles_local"], pb["goles_visita"], revertir=True)
                     guardar_base_datos(db)
                     st.rerun()
-    else:
-        st.info("No hay partidos en el historial registrado uno a uno.")
 
-# --- TAB 4: ANALIZADOR DE PRONÓSTICOS ---
+# --- TAB 4: ANALIZADOR CUANTITATIVO (POISSON + MONTE CARLO + FIBONACCI + CUOTAS) ---
 with tab4:
-    st.header("Predicción y Métricas del Enfrentamiento (Poisson)")
+    st.header("🎯 Analizador Cuantitativo Avanzado")
+    st.info("Todos los cálculos se generan 100% en base al rendimiento acumulado en la tabla de posiciones.")
     
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        p_local = st.selectbox("Seleccionar Local", equipos_disponibles, key="p_loc_analisis")
-    with col_p2:
-        idx_v_p = 1 if len(equipos_disponibles) > 1 else 0
-        p_visita = st.selectbox("Seleccionar Visitante", equipos_disponibles, index=idx_v_p, key="p_vis_analisis")
+    cp1, cp2 = st.columns(2)
+    with cp1:
+        p_local = st.selectbox("Equipo Local", equipos_disponibles, key="analisis_loc")
+    with cp2:
+        p_visita = st.selectbox("Equipo Visitante", equipos_disponibles, index=1 if len(equipos_disponibles)>1 else 0, key="analisis_vis")
 
     if p_local == p_visita:
-        st.warning("Selecciona dos equipos diferentes para generar el pronóstico.")
+        st.warning("Selecciona dos equipos diferentes.")
     else:
-        stats_loc = datos_liga["tabla"][p_local]
-        stats_vis = datos_liga["tabla"][p_visita]
+        stats_l = datos_liga["tabla"][p_local]
+        stats_v = datos_liga["tabla"][p_visita]
         
-        pron = generar_pronostico(stats_loc, stats_vis)
+        # Ejecutar motor cuantitativo
+        res = motor_analisis_avanzado(stats_l, stats_v)
         
-        st.subheader("📊 Probabilidades del Partido")
-        m1, m2, m3 = st.columns(3)
-        m1.metric(f"Victoria {p_local}", f"{pron['prob_local']}%")
-        m2.metric("Empate", f"{pron['prob_empate']}%")
-        m3.metric(f"Victoria {p_visita}", f"{pron['prob_visita']}%")
+        st.markdown("---")
+        st.subheader("📊 Reporte de Pronóstico y Probabilidades (Montecarlo 10k)")
         
-        st.subheader("⚽ Goles Esperados (xG)")
-        g1, g2, g3 = st.columns(3)
-        g1.metric(f"xG {p_local}", pron['xg_local'])
-        g2.metric(f"xG {p_visita}", pron['xg_visita'])
-        g3.metric("Expectativa Total", pron['xg_total'])
+        r1, r2, r3 = st.columns(3)
+        r1.metric(f"Victoria {p_local}", f"{res['p_local']}%", f"Cuota: {res['cuota_l']}")
+        r2.metric("Empate", f"{res['p_empate']}%", f"Cuota: {res['cuota_e']}")
+        r3.metric(f"Victoria {p_visita}", f"{res['p_visita']}%", f"Cuota: {res['cuota_v']}")
         
-        st.subheader("🎯 Marcadores Exactos Más Probables")
+        st.markdown("---")
+        st.subheader("⚽ Goles Esperados (xG) & Análisis Fibonacci")
+        xg1, xg2, xg3, xg4 = st.columns(4)
+        xg1.metric(f"xG Local", res['xg_local'])
+        xg2.metric(f"xG Visitante", res['xg_visita'])
+        xg3.metric("xG Total", res['xg_total'])
+        xg4.metric("Umbral Fibonacci (38.2%)", res['umbral_fib'])
+        
+        st.markdown("---")
+        st.subheader("🎯 Top 3 Marcadores Exactos (Simulación)")
         sc1, sc2, sc3 = st.columns(3)
-        top = pron['top_scores']
+        top = res['top_scores']
         if len(top) >= 1:
-            sc1.info(f"**1º Opción:** {p_local} {top[0][0]} - {top[0][1]} {p_visita}\n\nProb: {round(top[0][2]*100, 1)}%")
+            sc1.info(f"**1º Opción:** {p_local} {top[0][0]} - {top[0][1]} {p_visita}\n\nProb: {round(top[0][2], 1)}%")
         if len(top) >= 2:
-            sc2.info(f"**2º Opción:** {p_local} {top[1][0]} - {top[1][1]} {p_visita}\n\nProb: {round(top[1][2]*100, 1)}%")
+            sc2.info(f"**2º Opción:** {p_local} {top[1][0]} - {top[1][1]} {p_visita}\n\nProb: {round(top[1][2], 1)}%")
         if len(top) >= 3:
-            sc3.info(f"**3º Opción:** {p_local} {top[2][0]} - {top[2][1]} {p_visita}\n\nProb: {round(top[2][2]*100, 1)}%")
+            sc3.info(f"**3º Opción:** {p_local} {top[2][0]} - {top[2][1]} {p_visita}\n\nProb: {round(top[2][2], 1)}%")
             
+        st.markdown("---")
         st.subheader("💡 Recomendaciones de Mercado")
-        rec1, rec2 = st.columns(2)
-        rec1.success(f"**Línea de Goles:** {pron['recomendacion_goles']}")
-        rec2.success(f"**Ambos Anotan (BTTS):** {pron['ambos_marcan']}")
+        m_rec1, m_rec2 = st.columns(2)
+        m_rec1.success(f"**Línea de Goles:** {res['rec_goles']}")
+        m_rec2.success(f"**Ambos Anotan (BTTS):** {res['ambos_marcan']}")
+
