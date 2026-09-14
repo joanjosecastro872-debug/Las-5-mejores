@@ -277,7 +277,6 @@ with tab2:
     
     datos_actuales = datos_liga["tabla"][equipo_sel]
     
-    # Formulario para evitar recargas lentas al cambiar cada número
     with st.form(key=f"form_carga_{equipo_sel}"):
         col_loc, col_vis = st.columns(2)
         
@@ -300,17 +299,14 @@ with tab2:
         btn_actualizar = st.form_submit_button("💾 Guardar Datos del Equipo", type="primary")
         
         if btn_actualizar:
-            # Totales Local
             pj_l = pg_l + pe_l + pp_l
             pts_l = (pg_l * 3) + pe_l
             dg_l = gf_l - gc_l
             
-            # Totales Visitante
             pj_v = pg_v + pe_v + pp_v
             pts_v = (pg_v * 3) + pe_v
             dg_v = gf_v - gc_v
             
-            # Totales Generales
             pj_tot = pj_l + pj_v
             pg_tot = pg_l + pg_v
             pe_tot = pe_l + pe_v
@@ -320,7 +316,6 @@ with tab2:
             dg_tot = gf_tot - gc_tot
             pts_tot = pts_l + pts_v
             
-            # Actualización en la estructura
             datos_liga["tabla"][equipo_sel] = {
                 "PJ": pj_tot, "PG": pg_tot, "PE": pe_tot, "PP": pp_tot, "GF": gf_tot, "GC": gc_tot, "DG": dg_tot, "Pts": pts_tot,
                 "PJ_L": pj_l, "PG_L": pg_l, "PE_L": pe_l, "PP_L": pp_l, "GF_L": gf_l, "GC_L": gc_l, "DG_L": dg_l, "Pts_L": pts_l,
@@ -331,7 +326,7 @@ with tab2:
             st.success(f"¡Estadísticas de **{equipo_sel}** actualizadas correctamente!")
             st.rerun()
 
-# --- TAB 3: REGISTRAR PARTIDO A PARTIDO (ORIGINAL) ---
+# --- TAB 3: REGISTRAR PARTIDO A PARTIDO ---
 with tab3:
     st.header("Registrar Partido Individual (Jornada a Jornada)")
     
@@ -406,22 +401,19 @@ with tab4:
         stats_loc = datos_liga["tabla"][p_local]
         stats_vis = datos_liga["tabla"][p_visita]
         
-        pron = generar_pronostico(stats_loc, stats_vis)
+        pronostico = generar_pronostico(stats_loc, stats_vis)
         
-        st.subheader("📊 Probabilidades del Enfrentamiento")
-        m1, m2, m3 = st.columns(3)
-        m1.metric(f"Victoria {p_local}", f"{pron['prob_local']}%")
-        m2.metric("Empate", f"{pron['prob_empate']}%")
-        m3.metric(f"Victoria {p_visita}", f"{pron['prob_visita']}%")
+        st.markdown("### 📊 Probabilidades del Partido")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Victoria Local", f"{pronostico['prob_local']}%")
+        c2.metric("Empate", f"{pronostico['prob_empate']}%")
+        c3.metric("Victoria Visitante", f"{pronostico['prob_visita']}%")
         
-        st.subheader("⚽ Pronóstico de Goles (xG)")
-        g1, g2, g3 = st.columns(3)
-        g1.metric(f"xG {p_local}", pron['xg_local'])
-        g2.metric(f"xG {p_visita}", pron['xg_visita'])
-        g3.metric("Expectativa Total", pron['xg_total'])
+        st.markdown("### ⚽ Goles Esperados (xG)")
+        cg1, cg2, cg3 = st.columns(3)
+        cg1.metric("xG Local", pronostico['xg_local'])
+        cg2.metric("xG Visitante", pronostico['xg_visita'])
+        cg3.metric("xG Total", pronostico['xg_total'])
         
-        st.subheader("💡 Recomendaciones de Mercado")
-        rec1, rec2 = st.columns(2)
-        rec1.info(f"**Línea de Goles:** {pron['recomendacion_goles']}")
-        rec2.info(f"**Ambos Anotan (BTTS):** {pron['ambos_marcan']}")
-
+        st.markdown("### 💡 Recomendaciones de Apuesta")
+        st.info(f"**Ambos Marcan:** {pronostico['ambos_marcan']} | **Tendencia de Goles:** {pronostico['recomendacion_goles']}")
