@@ -10,7 +10,7 @@ from scipy.stats import poisson
 # 1. CONFIGURACIÓN BASE Y ESTILO MÓVIL
 # ==========================================
 st.set_page_config(
-    page_title="Zohan Pronostic v6 - Auditoría Quirúrgica Total",
+    page_title="Zohan Pronostic v6.2 - Auditoría y Marcadores Exactos",
     page_icon="⚽",
     layout="wide"
 )
@@ -212,6 +212,71 @@ def calcular_rachas_completas(historial, equipo):
         "ultimos": partidos[-5:]
     }
 
+def calcular_head_to_head(historial, eq1, eq2, modo="Global"):
+    enfrentamientos = []
+    v_eq1 = 0
+    v_eq2 = 0
+    empates = 0
+    
+    for p in historial:
+        if modo == "Global":
+            match_cond = (p['local'] == eq1 and p['visitante'] == eq2) or (p['local'] == eq2 and p['visitante'] == eq1)
+        else:
+            match_cond = (p['local'] == eq1 and p['visitante'] == eq2)
+            
+        if match_cond:
+            enfrentamientos.append(p)
+            if p['goles_local'] > p['goles_visita']:
+                ganador = p['local']
+            elif p['goles_local'] < p['goles_visita']:
+                ganador = p['visitante']
+            else:
+                ganador = "Empate"
+                
+            if ganador == eq1:
+                v_eq1 += 1
+            elif ganador == eq2:
+                v_eq2 += 1
+            else:
+                empates += 1
+                
+    return enfrentamientos, v_eq1, v_eq2, empates
+
+def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
+    goles_l = np.random.poisson(lambda_l, n_simulaciones)
+    goles_v = np.random.poisson(lambda_v, n_simulaciones)
+    
+    wins_l = np.sum(goles_l > goles_v)
+    wins_v = np.sum(goles_l < goles_v)
+    empates = np.sum(goles_l == goles_v)
+    
+    p_l = (wins_l / n_simulaciones) * 100
+    p_v = (wins_v / n_simulaciones) * 100
+    p_e = (empates / n_simulaciones) * 100
+    
+    return p_l, p_e, p_v, goles_l, goles_v
+
+def calcular_top_marcadores_exactos(lambda_l, lambda_v, top_n=5):
+    """Calcula la matriz de Poisson y extrae los top N marcadores más probables"""
+    goles_max = 6
+    pmf_l = poisson.pmf(np.arange(goles_max), lambda_l)
+    pmf_v = poisson.pmf(np.arange(goles_max), lambda_v)
+    matriz = np.outer(pmf_l, pmf_v)
+    
+    resultados = []
+    for gl in range(goles_max):
+        for gv in range(goles_max):
+            prob = float(matriz[gl, gv]) * 100
+            resultados.append({
+                "Marcador": f"{gl} - {gv}", 
+                "Goles Local": gl, 
+                "Goles Visitante": gv, 
+                "Probabilidad (%)": round(prob, 2)
+            })
+            
+    resultados_ordenados = sorted(resultados, key=lambda x: x["Probabilidad (%)"], reverse=True)
+    return resultados_ordenados[:top_n]
+
 def ejecutar_auditoria_equipo(stats_eq, historial, equipo, tabla_liga):
     pj = max(1, stats_eq["PJ"])
     pg = stats_eq["PG"]
@@ -230,13 +295,13 @@ def ejecutar_auditoria_equipo(stats_eq, historial, equipo, tabla_liga):
     
     if ratio_rendimiento <= 0.35 or rachas["sin_ganar"] >= 3:
         fibo_estado = "Soporte Crítico (0.382) - Toca Fondo"
-        fibo_mensaje = "El equipo ha caído a su zona de soporte profundo. Históricamente, al tocar el nivel 0.382 acumula una presión competitiva extrema, lo que lo vuelve candidato idóneo para un **impulso alcista sorpresivo** en su siguiente encuentro."
+        fibo_mensaje = "Zona de soporte profundo. Acumula presión extrema, ideal para un impulso alcista sorpresivo."
     elif ratio_rendimiento >= 0.70:
         fibo_estado = "Zona de Resistencia Alta (0.236)"
-        fibo_mensaje = "El equipo opera en la parte alta de la curva. Muestra solidez, pero está expuesto a correcciones de inercia o exceso de confianza si relaja la intensidad defensiva."
+        fibo_mensaje = "Parte alta de la curva. Muestra solidez pero expuesto a correcciones si baja la intensidad."
     else:
         fibo_estado = "Zona de Transición Neutral"
-        fibo_mensaje = "El equipo oscila en un rango de estabilidad media. Su rendimiento depende de los ajustes tácticos por partido."
+        fibo_mensaje = "Rango de estabilidad media dependiente de ajustes tácticos."
 
     lista_ord = sorted(tabla_liga.items(), key=lambda x: (x[1]["Pts"], x[1]["DG"], x[1]["GF"]), reverse=True)
     posicion = len(tabla_liga)
@@ -247,13 +312,8 @@ def ejecutar_auditoria_equipo(stats_eq, historial, equipo, tabla_liga):
 
     return {
         "pj": pj, "pg": pg, "pe": pe, "pp": pp, "gf": gf, "gc": gc, "pts": pts,
-        "eficiencia": eficiencia,
-        "prom_gf": prom_gf,
-        "prom_gc": prom_gc,
-        "posicion": posicion,
-        "rachas": rachas,
-        "fibo_estado": fibo_estado,
-        "fibo_mensaje": fibo_mensaje
+        "eficiencia": eficiencia, "prom_gf": prom_gf, "prom_gc": prom_gc,
+        "posicion": posicion, "rachas": rachas, "fibo_estado": fibo_estado, "fibo_mensaje": fibo_mensaje
     }
 
 # ==========================================
@@ -316,13 +376,7 @@ with tab1:
 
     filtro_vista = st.session_state.vista_tabla
     df_tabla = pd.DataFrame.from_dict(datos_liga["tabla"], orient="index")
-    if filtro_vista == "General":
-        cols = ["PJ", "PG", "PE", "PP", "GF", "GC", "DG", "Pts"]
-    elif filtro_vista == "Local":
-        cols = ["PJ_L", "PG_L", "PE_L", "PP_L", "GF_L", "GC_L", "DG_L", "Pts_L"]
-    else:
-        cols = ["PJ_V", "PG_V", "PE_V", "PP_V", "GF_V", "GC_V", "DG_V", "Pts_V"]
-
+    cols = ["PJ", "PG", "PE", "PP", "GF", "GC", "DG", "Pts"] if filtro_vista=="General" else (["PJ_L", "PG_L", "PE_L", "PP_L", "GF_L", "GC_L", "DG_L", "Pts_L"] if filtro_vista=="Local" else ["PJ_V", "PG_V", "PE_V", "PP_V", "GF_V", "GC_V", "DG_V", "Pts_V"])
     df_v = df_tabla[cols].copy()
     df_v.columns = ["PJ", "PG", "PE", "PP", "GF", "GC", "DG", "Pts"]
     df_v = df_v.sort_values(by=["Pts", "DG", "GF"], ascending=False)
@@ -391,8 +445,6 @@ with tab3:
 # --- TAB 4: AUDITORÍA GLOBAL Y CRUZADA ---
 with tab4:
     st.header("🔬 Auditoría Global y Examen Cruzado por Equipo")
-    st.info("Radiografía completa de la temporada: evalúa el rendimiento global, contrasta cómo se comporta jugando de local versus de visitante, y analiza su estado de forma e inercia matemática.")
-    
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     eq_audit = st.selectbox("Seleccionar Equipo a Examinar:", equipos_disponibles, key="select_audit_eq")
     
@@ -403,62 +455,16 @@ with tab4:
         
         st.markdown("---")
         st.subheader(f"📋 Radiografía Global de Temporada: {eq_audit}")
-        
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Posición en Liga", f"{audit_res['posicion']}º lugar")
         m2.metric("Eficiencia Total", f"{audit_res['eficiencia']}%")
         m3.metric("Goles Favor (Prom)", f"{audit_res['prom_gf']}")
         m4.metric("Goles Contra (Prom)", f"{audit_res['prom_gc']}")
-        
-        # --- DESGLOSE CRUZADO: LOCAL VS VISITANTE ---
-        st.markdown("---")
-        st.subheader("🏠 vs ✈️ Comportamiento Cruzado (Casa y Fuera)")
-        
-        col_l_audit, col_v_audit = st.columns(2)
-        
-        with col_l_audit:
-            st.markdown(f"#### 🏠 Rendimiento en Casa (Local)")
-            pj_l = stats_audit["PJ_L"]
-            pts_l = stats_audit["Pts_L"]
-            ef_l = round((pts_l / (pj_l * 3)) * 100, 1) if pj_l > 0 else 0.0
-            st.write(f"- **Partidos Jugados:** `{pj_l}`")
-            st.write(f"- **Pts / G - E - P:** `{pts_l} pts` ({stats_audit['PG_L']}G - {stats_audit['PE_L']}E - {stats_audit['PP_L']}P)")
-            st.write(f"- **Goles (F / C / DG):** `{stats_audit['GF_L']} GF` / `{stats_audit['GC_L']} GC` (DG: `{stats_audit['DG_L']}`)")
-            st.metric("Eficiencia Local", f"{ef_l}%")
-            
-        with col_v_audit:
-            st.markdown(f"#### ✈️ Rendimiento de Visitante (Fuera)")
-            pj_v = stats_audit["PJ_V"]
-            pts_v = stats_audit["Pts_V"]
-            ef_v = round((pts_v / (pj_v * 3)) * 100, 1) if pj_v > 0 else 0.0
-            st.write(f"- **Partidos Jugados:** `{pj_v}`")
-            st.write(f"- **Pts / G - E - P:** `{pts_v} pts` ({stats_audit['PG_V']}G - {stats_audit['PE_V']}E - {stats_audit['PP_V']}P)")
-            st.write(f"- **Goles (F / C / DG):** `{stats_audit['GF_V']} GF` / `{stats_audit['GC_V']} GC` (DG: `{stats_audit['DG_V']}`)")
-            st.metric("Eficiencia Visitante", f"{ef_v}%")
 
-        st.markdown("---")
-        st.subheader("📈 Ciclo de Fibonacci y Estado de Inercia")
-        st.markdown(f"**Estado del Ciclo:** `{audit_res['fibo_estado']}`")
-        st.info(audit_res['fibo_mensaje'])
-        
-        st.markdown("---")
-        st.subheader("📊 Historial de Rachas Puras")
-        rc1, rc2 = st.columns(2)
-        rc1.write(f"- **Racha Actual Invicto (Sin Perder):** `{audit_res['rachas']['invicto']} partidos`")
-        rc2.write(f"- **Racha Actual Sequía (Sin Ganar):** `{audit_res['rachas']['sin_ganar']} partidos`")
-        
-        if audit_res['rachas']['ultimos']:
-            st.markdown("**Últimos 5 encuentros registrados del equipo:**")
-            df_ultimos = pd.DataFrame(audit_res['rachas']['ultimos'])
-            df_ultimos.columns = ["Condición", "Rival", "Resultado", "GF", "GC"]
-            st.dataframe(df_ultimos, use_container_width=True, hide_index=True)
-        else:
-            st.warning("No hay suficientes partidos registrados en el historial para mostrar el desglose.")
-
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (DOBLE CARRIL) ---
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (CON MENSAJE Y TOP 5 MARCADORES EXACTOS) ---
 with tab5:
-    st.header(f"🎯 Analizador Quirúrgico Elite - Doble Carril ({liga_sel})")
-    st.info("Arquitectura de Doble Carril: **Carril Normal** (análisis estadístico sobrio y fiable para la mayoría de partidos) y **Carril Francotirador** (Alerta Roja exclusiva de alta exigencia para anomalías de valor).")
+    st.header(f"🎯 Analizador Quirúrgico Elite - Motor Dual & H2H ({liga_sel})")
+    st.info("Arquitectura de Alta Precisión: Poisson, Monte Carlo (10,000 escenarios), H2H configurable, Top 5 Marcadores Exactos y Mensaje Táctico.")
     
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     cp1, cp2 = st.columns(2)
@@ -467,79 +473,118 @@ with tab5:
     with cp2:
         p_visita = st.selectbox("Equipo Visitante", equipos_disponibles, index=1 if len(equipos_disponibles)>1 else 0, key="sync_vis")
 
+    st.markdown("---")
+    modo_h2h_sel = st.radio(
+        "🎛️ **Seleccionar Modo de Análisis Head-to-Head (H2H):**",
+        ["Global (Todos los enfrentamientos entre ambos)", "Estricto (Solo cuando el local juega en casa ante este visitante)"],
+        horizontal=True
+    )
+    filtro_h2h_modo = "Global" if "Global" in modo_h2h_sel else "Estricto"
+
     if p_local == p_visita:
         st.warning("⚠️ Selecciona dos equipos diferentes para realizar el análisis cruzado.")
     else:
-        if st.button("🔥 Ejecutar Análisis de Doble Carril", type="primary"):
+        if st.button("🔥 Ejecutar Simulación Estocástica & Top 5 Marcadores", type="primary"):
             stats_l = datos_liga["tabla"][p_local]
             stats_v = datos_liga["tabla"][p_visita]
             
             pj_l = max(1, stats_l["PJ"])
             pj_v = max(1, stats_v["PJ"])
             
-            # Promedios de goles reales
+            audit_l = ejecutar_auditoria_equipo(stats_l, datos_liga["historial"], p_local, datos_liga["tabla"])
+            audit_v = ejecutar_auditoria_equipo(stats_v, datos_liga["historial"], p_visita, datos_liga["tabla"])
+            
             gf_l_prom = stats_l["GF"] / pj_l
             gc_l_prom = stats_l["GC"] / pj_l
             gf_v_prom = stats_v["GF"] / pj_v
             gc_v_prom = stats_v["GC"] / pj_v
             
-            # Tasas de Poisson (lambda)
             lambda_local = (gf_l_prom + gc_v_prom) / 2
             lambda_visita = (gf_v_prom + gc_l_prom) / 2
             
-            # Matriz de probabilidad (0 a 5 goles)
-            matriz_prob = np.outer(
-                [poisson.pmf(i, lambda_local) for i in range(6)],
-                [poisson.pmf(j, lambda_visita) for j in range(6)]
-            )
-            
-            prob_local = np.sum(np.tril(matriz_prob, -1)) * 100
-            prob_empate = np.sum(np.diagonal(matriz_prob)) * 100
-            prob_visita = np.sum(np.triu(matriz_prob, 1)) * 100
-            
-            # ----------------------------------------------------
-            # CARRIL 1: MODO NORMAL (Análisis base sobrio y directo)
-            # ----------------------------------------------------
+            # Monte Carlo
+            mc_prob_l, mc_prob_e, mc_prob_v, sim_gl, sim_gv = simular_monte_carlo(lambda_local, lambda_visita, 10000)
+            prom_sim_gl = np.mean(sim_gl)
+            prom_sim_gv = np.mean(sim_gv)
+
+            # Top 5 Marcadores Exactos por Poisson
+            top_marcadores = calcular_top_marcadores_exactos(lambda_local, lambda_visita, 5)
+
+            # H2H
+            h2h_partidos, v_l_h2h, v_v_h2h, emp_h2h = calcular_head_to_head(datos_liga["historial"], p_local, p_visita, filtro_h2h_modo)
+            total_h2h = len(h2h_partidos)
+
+            # ====================================================
+            # MÓDULO DE MENSAJE Y DESGLOSE TÁCTICO TOTAL
+            # ====================================================
             st.markdown("---")
-            st.subheader("📊 Carril 1: Diagnóstico Estadístico (Modo Normal)")
-            col_r1, col_r2, col_r3 = st.columns(3)
-            col_r1.metric(f"Victoria {p_local}", f"{prob_local:.1f}%")
-            col_r2.metric("Empate Técnico", f"{prob_empate:.1f}%")
-            col_r3.metric(f"Victoria {p_visita}", f"{prob_visita:.1f}%")
+            st.subheader("📋 Mensaje y Desglose Táctico Total del Partido")
             
-            if prob_local > prob_visita and prob_local > prob_empate:
-                veredicto_normal = f"Tendencia lógica favorable al local (**{p_local}**). Comportamiento de mercado estándar."
-            elif prob_visita > prob_local and prob_visita > prob_empate:
-                veredicto_normal = f"Tendencia favorable al visitante (**{p_visita}**). Resistencia visitante identificada."
+            msg_clima = f"### 🏟️ Radiografía del Encuentro: {p_local} vs {p_visita}\n\n"
+            
+            msg_clima += f"#### 1️⃣ Estado de Forma y Posición\n"
+            msg_clima += f"- **{p_local} (Local):** Ubicado en el **puesto {audit_l['posicion']}º** con eficiencia del **{audit_l['eficiencia']}%**. Estado inercial: *{audit_l['fibo_estado']}* (Invicto actual: `{audit_l['rachas']['invicto']}`, Sequía: `{audit_l['rachas']['sin_ganar']}`). Promedia en casa `{audit_l['prom_gf']} GF` / `{audit_l['prom_gc']} GC`.\n"
+            msg_clima += f"- **{p_visita} (Visitante):** Ubicado en el **puesto {audit_v['posicion']}º** con eficiencia del **{audit_v['eficiencia']}%**. Estado inercial: *{audit_v['fibo_estado']}* (Invicto actual: `{audit_v['rachas']['invicto']}`, Sequía: `{audit_v['rachas']['sin_ganar']}`). Promedia fuera `{audit_v['prom_gf']} GF` / `{audit_v['prom_gc']} GC`.\n\n"
+            
+            msg_clima += f"#### 2️⃣ Motor Matemático (Monte Carlo & Poisson)\n"
+            msg_clima += f"- **Expectativa de Goles (Lambda):** Local: `{prom_sim_gl:.2f}` | Visitante: `{prom_sim_gv:.2f}`.\n"
+            msg_clima += f"- **Probabilidades de Resultado:** Victoria Local: **{mc_prob_l:.1f}%** | Empate: **{mc_prob_e:.1f}%** | Victoria Visitante: **{mc_prob_v:.1f}%**.\n\n"
+            
+            msg_clima += f"#### 3️⃣ Top 5 Posibles Marcadores Exactos\n"
+            for idx, m in enumerate(top_marcadores, 1):
+                msg_clima += f"  {idx}. **{m['Marcador']}** (Probabilidad: **{m['Probabilidad (%)']}%**)\n"
+            msg_clima += "\n"
+            
+            msg_clima += f"#### 4️⃣ Historial Cruzado ({filtro_h2h_modo})\n"
+            if total_h2h > 0:
+                msg_clima += f"- Se registraron **{total_h2h} enfrentamientos previos**: `{v_l_h2h}` victorias para {p_local}, `{emp_h2h}` empates y `{v_v_h2h}` victorias para {p_visita}.\n\n"
             else:
-                veredicto_normal = "Tendencia a paridad o partido cerrado de alta fricción táctica."
+                msg_clima += f"- No existen enfrentamientos previos registrados bajo el filtro `{filtro_h2h_modo}`.\n\n"
+                
+            if mc_prob_l > mc_prob_v and mc_prob_l > mc_prob_e:
+                veredicto_final = f"**Veredicto Táctico:** Escenario inclinado a favor del anfitrión (**{p_local}**). Su localía y el modelo estocástico respaldan el favoritismo."
+            elif mc_prob_v > mc_prob_l and mc_prob_v > mc_prob_e:
+                veredicto_final = f"**Veredicto Táctico:** Alerta de golpe foráneo. El visitante (**{p_visita}**) muestra argumentos numéricos idóneos para puntuar fuera de casa."
+            else:
+                veredicto_final = f"**Veredicto Táctico:** Partido de máxima paridad. Las simulaciones apuntan a un duelo cerrado donde los detalles definirán el marcador exacto."
+                
+            msg_clima += f"#### 🎯 Conclusión del Analizador\n{veredicto_final}"
             
-            st.info(f"💡 **Lectura Base:** {veredicto_normal}")
-            
+            st.success(msg_clima)
+
             # ----------------------------------------------------
-            # CARRIL 2: MODO FRANCOTIRADOR (Alerta Roja Ultra-Exclusiva)
+            # VISUALIZACIÓN DE MÉTRICAS Y TABLA DE TOP 5 MARCADORES
             # ----------------------------------------------------
             st.markdown("---")
-            st.subheader("🚨 Carril 2: Radar de Alerta Roja (Modo Francotirador)")
-            
+            col_m1, col_m2, col_m3 = st.columns(3)
+            col_m1.metric(f"Victoria {p_local}", f"{mc_prob_l:.1f}%", f"Goles: {prom_sim_gl:.2f}")
+            col_m2.metric("Empate Probable", f"{mc_prob_e:.1f}%")
+            col_m3.metric(f"Victoria {p_visita}", f"{mc_prob_v:.1f}%", f"Goles: {prom_sim_gv:.2f}")
+
+            st.markdown("---")
+            st.subheader("🎯 Tabla de los 5 Posibles Marcadores Exactos")
+            df_marcadores = pd.DataFrame(top_marcadores)
+            st.dataframe(df_marcadores, use_container_width=True, hide_index=True)
+
+            if total_h2h > 0:
+                st.markdown("---")
+                st.subheader(f"⚔️ Detalle H2H ({filtro_h2h_modo})")
+                df_h2h = pd.DataFrame(h2h_partidos)
+                df_h2h.columns = ["Local", "Visitante", "Goles Local", "Goles Visitante"]
+                st.dataframe(df_h2h, use_container_width=True, hide_index=True)
+
+            # ----------------------------------------------------
+            # CARRIL FRANCOTIRADOR (ALERTA ROJA)
+            # ----------------------------------------------------
+            st.markdown("---")
+            st.subheader("🚨 Radar de Alerta Roja (Modo Francotirador)")
             UMBRAL_FRANCOTIRADOR = 78.0
             UMBRAL_VISITANTE_ELITE = 70.0
             
-            if prob_local >= UMBRAL_FRANCOTIRADOR:
-                st.error(
-                    f"🎯 **¡ALERTA ROJA DE FRANCOTIRADOR ACTIVADA (CARRIL 2)!**\n\n"
-                    f"* **Objetivo de Oro:** Victoria aplastante de **{p_local}** con un nivel de confianza matemático del **{prob_local:.1f}%**.\n"
-                    f"* **Veredicto de Élite:** Supera el filtro estricto de inercia y solidez. Inclusión obligatoria en tu combinada alta."
-                )
-            elif prob_visita >= UMBRAL_VISITANTE_ELITE:
-                st.error(
-                    f"🎯 **¡ALERTA ROJA DE FRANCOTIRADOR ACTIVADA (CARRIL 2)!**\n\n"
-                    f"* **Objetivo de Oro:** Asalto táctico de **{p_visita}** con un {prob_visita:.1f}% de probabilidad.\n"
-                    f"* **Veredicto de Élite:** Anomalía de valor detectada en la defensa rival. Cuota de alta rentabilidad lista para cazar."
-                )
+            if mc_prob_l >= UMBRAL_FRANCOTIRADOR:
+                st.error(f"🎯 **¡ALERTA ROJA ACTIVADA!** Victoria aplastante proyectada para **{p_local}** con un **{mc_prob_l:.1f}%** de confianza estocástica.")
+            elif mc_prob_v >= UMBRAL_VISITANTE_ELITE:
+                st.error(f"🎯 **¡ALERTA ROJA ACTIVADA!** Asalto táctico proyectado de **{p_visita}** con un **{mc_prob_v:.1f}%** de probabilidad simulada.")
             else:
-                st.success(
-                    f"🛡️ **Carril Normal Activo — Sin Alerta Roja**\n\n"
-                    f"* El partido no alcanza el umbral de exigencia extrema ({UMBRAL_FRANCOTIRADOR}%+). El sistema opera de forma sobria, protegiendo tu bankroll de falsas alarmas. Partido apto para análisis tradicional."
-                )
+                st.info("🛡️ **Carril Normal:** Partido dentro de parámetros estándar. Sin alertas extremas; ideal para análisis conservador.")
 
