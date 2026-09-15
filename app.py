@@ -10,7 +10,7 @@ from scipy.stats import poisson
 # 1. CONFIGURACIÓN BASE Y ESTILO MÓVIL
 # ==========================================
 st.set_page_config(
-    page_title="Zohan Pronostic v6.5 - Elite Fibonacci, H2H & Top 5",
+    page_title="Zohan Pronostic v6.5 - Elite Fibonacci, H2H Dinámico & Top 5",
     page_icon="⚽",
     layout="wide"
 )
@@ -367,8 +367,8 @@ with tab4:
 
 # --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE ---
 with tab5:
-    st.header(f"🎯 Analizador Quirúrgico Elite - Fibonacci, H2H & Top 5 ({liga_sel})")
-    st.info("Los datos globales se extraen automáticamente de la tabla de posiciones. Registra abajo el historial cara a cara (H2H) y ejecuta el motor.")
+    st.header(f"🎯 Analizador Quirúrgico Elite - Fibonacci, H2H Dinámico & Top 5 ({liga_sel})")
+    st.info("Los datos globales se extraen automáticamente de la tabla. Ingresa los goles de los últimos enfrentamientos H2H para ponderar el motor matemático.")
     
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     cp1, cp2 = st.columns(2)
@@ -380,7 +380,7 @@ with tab5:
     stats_l_base = datos_liga["tabla"][p_local]
     stats_v_base = datos_liga["tabla"][p_visita]
 
-    # Extracción automática estricta desde la tabla de posiciones
+    # Extracción automática desde la tabla
     m_pj_l = max(1, stats_l_base["PJ_L"])
     m_gf_l = stats_l_base["GF_L"]
     m_gc_l = stats_l_base["GC_L"]
@@ -399,31 +399,40 @@ with tab5:
             st.write(f"- PJ: `{m_pj_v}` | GF: `{m_gf_v}` | GC: `{m_gc_v}`")
 
     st.markdown("---")
-    with st.expander("⚔️ Ingreso Manual: Últimos 10 Partidos Cara a Cara (H2H)", expanded=True):
-        st.write("Registra el balance directo de los últimos 10 enfrentamientos entre ambos:")
+    with st.expander("⚔️ Historial Cara a Cara (H2H) con Influencia Matemática", expanded=True):
+        st.write("Registra los últimos partidos directos y los goles anotados entre ambos para ponderar el modelo:")
         h2h_c1, h2h_c2, h2h_c3 = st.columns(3)
         with h2h_c1:
-            m_h2h_v_loc = st.number_input(f"Victorias de {p_local}", min_value=0, max_value=10, value=3, key="h2h_vl")
+            h2h_pj = st.number_input("Partidos H2H jugados", min_value=1, max_value=10, value=5, key="h2h_pj")
         with h2h_c2:
-            m_h2h_emp = st.number_input("Empates", min_value=0, max_value=10, value=3, key="h2h_pe")
+            h2h_goles_l = st.number_input(f"Goles totales de {p_local} en H2H", min_value=0, value=7, key="h2h_gl")
         with h2h_c3:
-            m_h2h_v_vis = st.number_input(f"Victorias de {p_visita}", min_value=0, max_value=10, value=4, key="h2h_vv")
+            h2h_goles_v = st.number_input(f"Goles totales de {p_visita} en H2H", min_value=0, value=5, key="h2h_gv")
 
     st.markdown("---")
     if p_local == p_visita:
-        st.warning("⚠️ Selecciona dos equipos diferentes para realizar el análisis cruzado.")
+        st.warning("⚠️ Selecciona two equipos diferentes para realizar el análisis cruzado.")
     else:
         if st.button("🔥 Ejecutar Simulación Estocástica & Top 5 Marcadores Exactos", type="primary"):
             fibo_l = calcular_fibonacci_y_tendencia(stats_l_base, datos_liga["historial"], p_local)
             fibo_v = calcular_fibonacci_y_tendencia(stats_v_base, datos_liga["historial"], p_visita)
             
+            # Promedios de la tabla general
             gf_l_prom = m_gf_l / m_pj_l
             gc_l_prom = m_gc_l / m_pj_l
             gf_v_prom = m_gf_v / m_pj_v
             gc_v_prom = m_gc_v / m_pj_v
             
-            lambda_local = (gf_l_prom + gc_v_prom) / 2
-            lambda_visita = (gf_v_prom + gc_l_prom) / 2
+            base_lambda_local = (gf_l_prom + gc_v_prom) / 2
+            base_lambda_visita = (gf_v_prom + gc_l_prom) / 2
+            
+            # Promedios del Cara a Cara (H2H)
+            h2h_lambda_l = h2h_goles_l / h2h_pj
+            h2h_lambda_v = h2h_goles_v / h2h_pj
+            
+            # Ponderación final: 70% rendimiento de tabla + 30% tendencia directa H2H
+            lambda_local = (0.7 * base_lambda_local) + (0.3 * h2h_lambda_l)
+            lambda_visita = (0.7 * base_lambda_visita) + (0.3 * h2h_lambda_v)
             
             mc_prob_l, mc_prob_e, mc_prob_v, sim_gl, sim_gv = simular_monte_carlo(lambda_local, lambda_visita, 10000)
             prom_sim_gl = np.mean(sim_gl)
@@ -432,7 +441,7 @@ with tab5:
             top_marcadores = calcular_top_marcadores_exactos(lambda_local, lambda_visita, 5)
 
             st.markdown("---")
-            st.subheader("📋 Mensaje y Desglose Táctico Integral (Fibonacci & Tendencia)")
+            st.subheader("📋 Mensaje y Desglose Táctico Integral (Fibonacci & H2H)")
             
             msg_clima = f"### 🏟️ Radiografía del Encuentro: {p_local} vs {p_visita}\n\n"
             
@@ -440,11 +449,11 @@ with tab5:
             msg_clima += f"- **{p_local} (Local):** Tendencia: *{fibo_l['tendencia']}* | Nivel: **{fibo_l['fibo_estado']}**.\n  > *{fibo_l['fibo_mensaje']}*\n"
             msg_clima += f"- **{p_visita} (Visitante):** Tendencia: *{fibo_v['tendencia']}* | Nivel: **{fibo_v['fibo_estado']}**.\n  > *{fibo_v['fibo_mensaje']}*\n\n"
             
-            msg_clima += f"#### 2️⃣ Historial Cara a Cara Manual (Últimos 10 partidos)\n"
-            msg_clima += f"- Balance ingresado: `{m_h2h_v_loc}` victorias para {p_local} | `{m_h2h_emp}` empates | `{m_h2h_v_vis}` victorias para {p_visita}.\n\n"
+            msg_clima += f"#### 2️⃣ Impacto Histórico Cara a Cara (H2H Ponderado)\n"
+            msg_clima += f"- En los últimos `{h2h_pj}` duelos directos analizados, {p_local} aportó `{h2h_goles_l}` goles y {p_visita} aportó `{h2h_goles_v}` goles. Este balance ajusta directamente el motor de Poisson.\n\n"
             
-            msg_clima += f"#### 3️⃣ Motor Matemático (Monte Carlo & Poisson)\n"
-            msg_clima += f"- **Expectativa de Goles (Lambda):** Local: `{prom_sim_gl:.2f}` | Visitante: `{prom_sim_gv:.2f}`.\n"
+            msg_clima += f"#### 3️⃣ Motor Matemático (Monte Carlo & Poisson Ajustado)\n"
+            msg_clima += f"- **Expectativa de Goles (Lambda Final):** Local: `{prom_sim_gl:.2f}` | Visitante: `{prom_sim_gv:.2f}`.\n"
             msg_clima += f"- **Probabilidades de Resultado:** Victoria Local: **{mc_prob_l:.1f}%** | Empate: **{mc_prob_e:.1f}%** | Victoria Visitante: **{mc_prob_v:.1f}%**.\n\n"
             
             msg_clima += f"#### 4️⃣ Top 5 Posibles Marcadores Exactos\n"
@@ -453,11 +462,11 @@ with tab5:
             msg_clima += "\n"
             
             if mc_prob_l > mc_prob_v and mc_prob_l > mc_prob_e:
-                veredicto_final = f"**Veredicto Táctico:** Escenario inclinado a favor del anfitrión (**{p_local}**). La inercia y los soportes respaldan el favoritismo."
+                veredicto_final = f"**Veredicto Táctico:** Escenario inclinado a favor del anfitrión (**{p_local}**). La inercia y los antecedentes directos respaldan el favoritismo."
             elif mc_prob_v > mc_prob_l and mc_prob_v > mc_prob_e:
                 veredicto_final = f"**Veredicto Táctico:** Alerta de golpe foráneo. El visitante (**{p_visita}**) muestra argumentos numéricos idóneos para puntuar fuera de casa."
             else:
-                veredicto_final = f"**Veredicto Táctico:** Partido de máxima paridad. Las curvas de Fibonacci apuntan a un duelo cerrado donde los detalles definirán el marcador."
+                veredicto_final = f"**Veredicto Táctico:** Partido de máxima paridad. Las curvas de Fibonacci y el historial apuntan a un duelo cerrado donde los detalles definirán el marcador."
                 
             msg_clima += f"#### 🎯 Conclusión del Analizador\n{veredicto_final}"
             
@@ -476,13 +485,15 @@ with tab5:
 
             st.markdown("---")
             st.subheader("🚨 Radar de Alerta Roja (Modo Francotirador)")
-            UMBRAL_FRANCOTIRADOR = 78.0
-            UMBRAL_VISITANTE_ELITE = 70.0
+            
+            # Umbrales ajustados para mayor sensibilidad en partidos trampa
+            UMBRAL_FRANCOTIRADOR = 60.0
+            UMBRAL_VISITANTE_ELITE = 53.0
             
             if mc_prob_l >= UMBRAL_FRANCOTIRADOR:
-                st.error(f"🎯 **¡ALERTA ROJA ACTIVADA!** Victoria aplastante proyectada para **{p_local}** con un **{mc_prob_l:.1f}%** de confianza estocástica.")
+                st.error(f"🎯 **¡ALERTA ROJA (FAVORITO CLARO / TRAMPA)!** El anfitrión **{p_local}** domina con un **{mc_prob_l:.1f}%** en la simulación estocástica.")
             elif mc_prob_v >= UMBRAL_VISITANTE_ELITE:
-                st.error(f"🎯 **¡ALERTA ROJA ACTIVADA!** Asalto táctico proyectado de **{p_visita}** con un **{mc_prob_v:.1f}%** de probabilidad simulada.")
+                st.error(f"🎯 **¡ALERTA ROJA (ASALTO FORÁNEO)!** El visitante **{p_visita}** muestra una fuerza del **{mc_prob_v:.1f}%**, ideal para buscar valor afuera.")
             else:
-                st.info("🛡️ **Carril Normal:** Partido dentro de parámetros estándar. Sin alertas extremas; ideal para análisis conservador.")
+                st.info("🛡️ **Carril Normal:** Partido dentro de parámetros estándar o de máxima paridad. Sin alertas extremas.")
 
