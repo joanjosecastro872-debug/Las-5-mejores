@@ -1,15 +1,16 @@
+# /mount/src/las-5-mejores/app.py
 import streamlit as st
 import json
 import os
 import pandas as pd
-import math
-import random
+import numpy as np
+from scipy.stats import poisson
 
 # ==========================================
 # 1. CONFIGURACIÓN BASE Y ESTILO MÓVIL
 # ==========================================
 st.set_page_config(
-    page_title="Zohan Pronostic v4 - Top 5 Marcadores Claros",
+    page_title="Zohan Pronostic v6 - Auditoría Quirúrgica Total",
     page_icon="⚽",
     layout="wide"
 )
@@ -77,7 +78,7 @@ LIGAS_EQUIPOS = {
 }
 
 # ==========================================
-# 2. GESTIÓN DE BASE DE DATOS Y TXT
+# 2. GESTIÓN DE BASE DE DATOS Y LÓGICA
 # ==========================================
 def obtener_estructura_equipo():
     return {
@@ -178,124 +179,91 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
     eq_v["DG_V"] = eq_v["GF_V"] - eq_v["GC_V"]
     eq_v["Pts_V"] += factor * pts_v
 
-# ==========================================
-# 3. MOTOR INTELIGENTE Y TOP 5 MARCADORES
-# ==========================================
-def calcular_forma_reciente_equipo(historial, equipo, n=5):
-    partidos_local = [p for p in historial if p['local'] == equipo]
-    partidos_visita = [p for p in historial if p['visitante'] == equipo]
-    
-    ult_l = partidos_local[-n:] if len(partidos_local) >= n else partidos_local
-    gf_l_rec = sum(p['goles_local'] for p in ult_l) / max(1, len(ult_l))
-    gc_l_rec = sum(p['goles_visita'] for p in ult_l) / max(1, len(ult_l))
-    
-    ult_v = partidos_visita[-n:] if len(partidos_visita) >= n else partidos_visita
-    gf_v_rec = sum(p['goles_visita'] for p in ult_v) / max(1, len(ult_v))
-    gc_v_rec = sum(p['goles_local'] for p in ult_v) / max(1, len(ult_v))
-    
-    return {
-        "gf_l_rec": gf_l_rec, "gc_l_rec": gc_l_rec,
-        "gf_v_rec": gf_v_rec, "gc_v_rec": gc_v_rec
-    }
-
-def np_poisson_sim(lmbda):
-    L = math.exp(-lmbda)
-    k = 0
-    p = 1.0
-    while p > L:
-        k += 1
-        p *= random.random()
-    return k - 1
-
-def motor_analisis_inteligente(stats_local, stats_visita, historial, p_local, p_visita, iteraciones_mc=10000):
-    pj_l = max(1, stats_local["PJ_L"])
-    pj_v = max(1, stats_visita["PJ_V"])
-    
-    gf_l_casa_base = stats_local["GF_L"] / pj_l
-    gc_l_casa_base = stats_local["GC_L"] / pj_l
-    gf_v_fuera_base = stats_visita["GF_V"] / pj_v
-    gc_v_fuera_base = stats_visita["GC_V"] / pj_v
-
-    forma_l = calcular_forma_reciente_equipo(historial, p_local, n=5)
-    forma_v = calcular_forma_reciente_equipo(historial, p_visita, n=5)
-
-    gf_l_efectivo = (gf_l_casa_base * 0.7) + (forma_l["gf_l_rec"] * 0.3)
-    gc_l_efectivo = (gc_l_casa_base * 0.7) + (forma_l["gc_l_rec"] * 0.3)
-    gf_v_efectivo = (gf_v_fuera_base * 0.7) + (forma_v["gf_v_rec"] * 0.3)
-    gc_v_efectivo = (gc_v_fuera_base * 0.7) + (forma_v["gc_v_rec"] * 0.3)
-
-    lambda_h_base = (gf_l_efectivo + gc_v_efectivo) / 2
-    lambda_a_base = (gf_v_efectivo + gc_l_efectivo) / 2
-
-    fib_236 = 0.236
-    fib_382 = 0.382
-
-    factor_ajuste_h = 1 + (fib_236 if gf_l_efectivo > gc_v_efectivo else -fib_382)
-    factor_ajuste_a = 1 + (fib_236 if gf_v_efectivo > gc_l_efectivo else -fib_382)
-
-    lambda_home_sync = max(0.2, lambda_h_base * factor_ajuste_h)
-    lambda_away_sync = max(0.2, lambda_a_base * factor_ajuste_a)
-
-    xg_total = round(lambda_home_sync + lambda_away_sync, 2)
-    umbral_fibonacci = round(xg_total * (1 + fib_382), 2)
-
-    wins_l, wins_v, draws = 0, 0, 0
-    conteo_scores = {}
-
-    for _ in range(iteraciones_mc):
-        gh = np_poisson_sim(lambda_home_sync)
-        ga = np_poisson_sim(lambda_away_sync)
-
-        if gh > ga:
-            wins_l += 1
-        elif gh < ga:
-            wins_v += 1
+def calcular_rachas_completas(historial, equipo):
+    partidos = []
+    for p in historial:
+        if p['local'] == equipo:
+            res = "G" if p['goles_local'] > p['goles_visita'] else ("E" if p['goles_local'] == p['goles_visita'] else "P")
+            partidos.append({"condicion": "Local", "rival": p['visitante'], "res": res, "gf": p['goles_local'], "gc": p['goles_visita']})
+        elif p['visitante'] == equipo:
+            res = "G" if p['goles_visita'] > p['goles_local'] else ("E" if p['goles_visita'] == p['goles_local'] else "P")
+            partidos.append({"condicion": "Visitante", "rival": p['local'], "res": res, "gf": p['goles_visita'], "gc": p['goles_local']})
+            
+    if not partidos:
+        return {"invicto": 0, "sin_ganar": 0, "ultimos": []}
+        
+    invicto = 0
+    for p in reversed(partidos):
+        if p['res'] in ["G", "E"]:
+            invicto += 1
         else:
-            draws += 1
+            break
+            
+    sin_ganar = 0
+    for p in reversed(partidos):
+        if p['res'] in ["E", "P"]:
+            sin_ganar += 1
+        else:
+            break
+            
+    return {
+        "invicto": invicto,
+        "sin_ganar": sin_ganar,
+        "ultimos": partidos[-5:]
+    }
 
-        sc_key = (gh, ga)
-        conteo_scores[sc_key] = conteo_scores.get(sc_key, 0) + 1
+def ejecutar_auditoria_equipo(stats_eq, historial, equipo, tabla_liga):
+    pj = max(1, stats_eq["PJ"])
+    pg = stats_eq["PG"]
+    pe = stats_eq["PE"]
+    pp = stats_eq["PP"]
+    gf = stats_eq["GF"]
+    gc = stats_eq["GC"]
+    pts = stats_eq["Pts"]
+    
+    eficiencia = round((pts / (pj * 3)) * 100, 1) if pj > 0 else 0.0
+    prom_gf = round(gf / pj, 2)
+    prom_gc = round(gc / pj, 2)
+    
+    rachas = calcular_rachas_completas(historial, equipo)
+    ratio_rendimiento = eficiencia / 100.0
+    
+    if ratio_rendimiento <= 0.35 or rachas["sin_ganar"] >= 3:
+        fibo_estado = "Soporte Crítico (0.382) - Toca Fondo"
+        fibo_mensaje = "El equipo ha caído a su zona de soporte profundo. Históricamente, al tocar el nivel 0.382 acumula una presión competitiva extrema, lo que lo vuelve candidato idóneo para un **impulso alcista sorpresivo** en su siguiente encuentro."
+    elif ratio_rendimiento >= 0.70:
+        fibo_estado = "Zona de Resistencia Alta (0.236)"
+        fibo_mensaje = "El equipo opera en la parte alta de la curva. Muestra solidez, pero está expuesto a correcciones de inercia o exceso de confianza si relaja la intensidad defensiva."
+    else:
+        fibo_estado = "Zona de Transición Neutral"
+        fibo_mensaje = "El equipo oscila en un rango de estabilidad media. Su rendimiento depende de los ajustes tácticos por partido."
 
-    p_local_pct = (wins_l / iteraciones_mc) * 100
-    p_empate_pct = (draws / iteraciones_mc) * 100
-    p_visita_pct = (wins_v / iteraciones_mc) * 100
-
-    cuota_l = round(100 / max(0.1, p_local_pct), 2)
-    cuota_e = round(100 / max(0.1, p_empate_pct), 2)
-    cuota_v = round(100 / max(0.1, p_visita_pct), 2)
-
-    # Extracción de los TOP 5 marcadores exactos
-    sorted_scores = sorted(conteo_scores.items(), key=lambda x: x[1], reverse=True)
-    top_scores = [(s[0][0], s[0][1], (s[1] / iteraciones_mc) * 100) for s in sorted_scores[:5]]
-
-    ambos_marcan = "Sí" if (lambda_home_sync >= 0.95 and lambda_away_sync >= 0.95) else "No"
-    rec_goles = "Más de 2.5" if xg_total > 2.55 else ("Menos de 2.5" if xg_total < 2.05 else "Línea 1.5 / 2.0")
+    lista_ord = sorted(tabla_liga.items(), key=lambda x: (x[1]["Pts"], x[1]["DG"], x[1]["GF"]), reverse=True)
+    posicion = len(tabla_liga)
+    for idx, (eq, _) in enumerate(lista_ord):
+        if eq == equipo:
+            posicion = idx + 1
+            break
 
     return {
-        "xg_local": round(lambda_home_sync, 2),
-        "xg_visita": round(lambda_away_sync, 2),
-        "xg_total": xg_total,
-        "umbral_fibonacci": umbral_fibonacci,
-        "p_local": round(p_local_pct, 1),
-        "p_empate": round(p_empate_pct, 1),
-        "p_visita": round(p_visita_pct, 1),
-        "cuota_l": cuota_l,
-        "cuota_e": cuota_e,
-        "cuota_v": cuota_v,
-        "top_scores": top_scores,
-        "ambos_marcan": ambos_marcan,
-        "rec_goles": rec_goles
+        "pj": pj, "pg": pg, "pe": pe, "pp": pp, "gf": gf, "gc": gc, "pts": pts,
+        "eficiencia": eficiencia,
+        "prom_gf": prom_gf,
+        "prom_gc": prom_gc,
+        "posicion": posicion,
+        "rachas": rachas,
+        "fibo_estado": fibo_estado,
+        "fibo_mensaje": fibo_mensaje
     }
 
 # ==========================================
-# 4. INTERFAZ STREAMLIT
+# 3. INTERFAZ STREAMLIT
 # ==========================================
 db = cargar_base_datos()
 
 liga_sel = st.sidebar.selectbox("⚽ Seleccionar Liga", list(LIGAS_EQUIPOS.keys()), key="select_liga_main")
 datos_liga = db[liga_sel]
 
-# Respaldo TXT
 st.sidebar.markdown("---")
 st.sidebar.subheader("📱 Gestión de Archivo .TXT")
 db_string = json.dumps(db, ensure_ascii=False, indent=4)
@@ -318,18 +286,17 @@ if archivo_subido is not None:
     except Exception:
         st.sidebar.error("Archivo .txt inválido.")
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 Tabla de Posiciones", 
-    "⚙️ Carga Directa Avanzada (Tabla)", 
+    "⚙️ Carga Directa Avanzada", 
     "📝 Registrar Partido", 
-    "🎯 Analizador Inteligente"
+    "🔬 Auditoría Global y Cruzada",
+    "🎯 Analizador Quirúrgico Elite"
 ])
 
-# --- TAB 1: TABLA CON BOTONES DE FACETA ---
+# --- TAB 1: TABLA DE POSICIONES ---
 with tab1:
     st.header(f"Tabla de Posiciones - {liga_sel}")
-    st.markdown("Selecciona la faceta que deseas visualizar en la tabla:")
-    
     if 'vista_tabla' not in st.session_state:
         st.session_state.vista_tabla = "General"
 
@@ -348,8 +315,6 @@ with tab1:
             st.rerun()
 
     filtro_vista = st.session_state.vista_tabla
-    st.markdown(f"**Visualizando Clasificación:** `{filtro_vista}`")
-
     df_tabla = pd.DataFrame.from_dict(datos_liga["tabla"], orient="index")
     if filtro_vista == "General":
         cols = ["PJ", "PG", "PE", "PP", "GF", "GC", "DG", "Pts"]
@@ -366,56 +331,44 @@ with tab1:
 # --- TAB 2: CARGA DIRECTA AVANZADA ---
 with tab2:
     st.header("⚙️ Carga Directa Avanzada por Equipo")
-    st.info("Introduce de forma detallada el desglose completo en casa y fuera de casa para alimentar los cálculos con máxima precisión.")
-    
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     eq_target = st.selectbox("Seleccionar Equipo a Configurar:", equipos_disponibles, key="eq_avanzado")
     dt_eq = datos_liga["tabla"][eq_target]
     
     with st.form(key=f"form_avanzado_{eq_target}"):
         col_l, col_v = st.columns(2)
-        
         with col_l:
-            st.markdown("### 🏠 Rendimiento Local (Casa)")
-            pj_l = st.number_input("Partidos Jugados (Local)", min_value=0, value=int(dt_eq["PJ_L"]))
-            pg_l = st.number_input("Ganados (Local)", min_value=0, value=int(dt_eq["PG_L"]))
-            pe_l = st.number_input("Empatados (Local)", min_value=0, value=int(dt_eq["PE_L"]))
-            pp_l = st.number_input("Perdidos (Local)", min_value=0, value=int(dt_eq["PP_L"]))
-            gf_l = st.number_input("Goles a Favor (Local)", min_value=0, value=int(dt_eq["GF_L"]))
-            gc_l = st.number_input("Goles en Contra (Local)", min_value=0, value=int(dt_eq["GC_L"]))
-            
+            st.markdown("### 🏠 Rendimiento Local")
+            pj_l = st.number_input("PJ (L)", min_value=0, value=int(dt_eq["PJ_L"]))
+            pg_l = st.number_input("PG (L)", min_value=0, value=int(dt_eq["PG_L"]))
+            pe_l = st.number_input("PE (L)", min_value=0, value=int(dt_eq["PE_L"]))
+            pp_l = st.number_input("PP (L)", min_value=0, value=int(dt_eq["PP_L"]))
+            gf_l = st.number_input("GF (L)", min_value=0, value=int(dt_eq["GF_L"]))
+            gc_l = st.number_input("GC (L)", min_value=0, value=int(dt_eq["GC_L"]))
         with col_v:
-            st.markdown("### ✈️ Rendimiento Visitante (Fuera)")
-            pj_v = st.number_input("Partidos Jugados (Visitante)", min_value=0, value=int(dt_eq["PJ_V"]))
-            pg_v = st.number_input("Ganados (Visitante)", min_value=0, value=int(dt_eq["PG_V"]))
-            pe_v = st.number_input("Empatados (Visitante)", min_value=0, value=int(dt_eq["PE_V"]))
-            pp_v = st.number_input("Perdidos (Visitante)", min_value=0, value=int(dt_eq["PP_V"]))
-            gf_v = st.number_input("Goles a Favor (Visitante)", min_value=0, value=int(dt_eq["GF_V"]))
-            gc_v = st.number_input("Goles en Contra (Visitante)", min_value=0, value=int(dt_eq["GC_V"]))
+            st.markdown("### ✈️ Rendimiento Visitante")
+            pj_v = st.number_input("PJ (V)", min_value=0, value=int(dt_eq["PJ_V"]))
+            pg_v = st.number_input("PG (V)", min_value=0, value=int(dt_eq["PG_V"]))
+            pe_v = st.number_input("PE (V)", min_value=0, value=int(dt_eq["PE_V"]))
+            pp_v = st.number_input("PP (V)", min_value=0, value=int(dt_eq["PP_V"]))
+            gf_v = st.number_input("GF (V)", min_value=0, value=int(dt_eq["GF_V"]))
+            gc_v = st.number_input("GC (V)", min_value=0, value=int(dt_eq["GC_V"]))
             
-        btn_guardar_avanzado = st.form_submit_button("💾 Actualizar Perfil Completo del Equipo", type="primary")
-        
-        if btn_guardar_avanzado:
-            pts_l = (pg_l * 3) + pe_l
-            dg_l = gf_l - gc_l
-            pts_v = (pg_v * 3) + pe_v
-            dg_v = gf_v - gc_v
-            
+        if st.form_submit_button("💾 Guardar Perfil", type="primary"):
             datos_liga["tabla"][eq_target] = {
                 "PJ": pj_l + pj_v, "PG": pg_l + pg_v, "PE": pe_l + pe_v, "PP": pp_l + pp_v,
-                "GF": gf_l + gf_v, "GC": gc_l + gc_v, "DG": dg_l + dg_v, "Pts": pts_l + pts_v,
-                "PJ_L": pj_l, "PG_L": pg_l, "PE_L": pe_l, "PP_L": pp_l, "GF_L": gf_l, "GC_L": gc_l, "DG_L": dg_l, "Pts_L": pts_l,
-                "PJ_V": pj_v, "PG_V": pg_v, "PE_V": pe_v, "PP_V": pp_v, "GF_V": gf_v, "GC_V": gc_v, "DG_V": dg_v, "Pts_V": pts_v
+                "GF": gf_l + gf_v, "GC": gc_l + gc_v, "DG": (gf_l+gf_v)-(gc_l+gc_v), "Pts": (pg_l+pg_v)*3 + (pe_l+pe_v),
+                "PJ_L": pj_l, "PG_L": pg_l, "PE_L": pe_l, "PP_L": pp_l, "GF_L": gf_l, "GC_L": gc_l, "DG_L": gf_l-gc_l, "Pts_L": pg_l*3+pe_l,
+                "PJ_V": pj_v, "PG_V": pg_v, "PE_V": pe_v, "PP_V": pp_v, "GF_V": gf_v, "GC_V": gc_v, "DG_V": gf_v-gc_v, "Pts_V": pg_v*3+pe_v
             }
             guardar_base_datos(db)
-            st.success(f"¡Perfil estadístico avanzado de **{eq_target}** guardado con éxito!")
+            st.success("¡Guardado con éxito!")
             st.rerun()
 
 # --- TAB 3: REGISTRO PARTIDO ---
 with tab3:
-    st.header("Registrar Partido (Impacto en Tabla e Historial)")
+    st.header("Registrar Partido")
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
-    
     with st.form(key="form_match_sync"):
         c1, c2 = st.columns(2)
         with c1:
@@ -425,86 +378,168 @@ with tab3:
             eq_v = st.selectbox("Visitante", equipos_disponibles, index=1 if len(equipos_disponibles)>1 else 0)
             gv = st.number_input("Goles Visitante", min_value=0, step=1, value=0)
             
-        if st.form_submit_button("⚽ Registrar y Sincronizar Sistema", type="primary"):
+        if st.form_submit_button("⚽ Registrar", type="primary"):
             if eq_l == eq_v:
-                st.error("El local y visitante no pueden ser el mismo equipo.")
+                st.error("El local y visitante no pueden ser iguales.")
             else:
                 aplicar_partido_a_tabla(datos_liga["tabla"], eq_l, eq_v, gl, gv)
                 datos_liga["historial"].append({"local": eq_l, "visitante": eq_v, "goles_local": gl, "goles_visita": gv})
                 guardar_base_datos(db)
-                st.success("¡Partido registrado y analizado por el modelo inteligente!")
+                st.success("¡Partido registrado!")
                 st.rerun()
 
-    st.markdown("---")
-    st.subheader("Historial Registrado")
-    if datos_liga["historial"]:
-        for idx, p in enumerate(reversed(datos_liga["historial"])):
-            idx_r = len(datos_liga["historial"]) - 1 - idx
-            ch1, ch2 = st.columns([4, 1])
-            with ch1:
-                st.write(f"**{p['local']}** {p['goles_local']} - {p['goles_visita']} **{p['visitante']}**")
-            with ch2:
-                if st.button("Eliminar", key=f"del_sync_{idx_r}"):
-                    pb = datos_liga["historial"].pop(idx_r)
-                    aplicar_partido_a_tabla(datos_liga["tabla"], pb["local"], pb["visitante"], pb["goles_local"], pb["goles_visita"], revertir=True)
-                    guardar_base_datos(db)
-                    st.rerun()
-
-# --- TAB 4: ANALIZADOR INTELIGENTE (CON TOP 5 MARCADORES CLAROS) ---
+# --- TAB 4: AUDITORÍA GLOBAL Y CRUZADA ---
 with tab4:
-    st.header("🎯 Analizador Inteligente Unificado (Forma + Poisson + Montecarlo + Fibonacci)")
-    st.info("Este motor combina las estadísticas globales de la tabla con la inercia reciente de los últimos partidos, filtrando con Fibonacci y simulando 10,000 escenarios.")
+    st.header("🔬 Auditoría Global y Examen Cruzado por Equipo")
+    st.info("Radiografía completa de la temporada: evalúa el rendimiento global, contrasta cómo se comporta jugando de local versus de visitante, y analiza su estado de forma e inercia matemática.")
+    
+    equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
+    eq_audit = st.selectbox("Seleccionar Equipo a Examinar:", equipos_disponibles, key="select_audit_eq")
+    
+    if eq_audit:
+        stats_audit = datos_liga["tabla"][eq_audit]
+        historial_audit = datos_liga["historial"]
+        audit_res = ejecutar_auditoria_equipo(stats_audit, historial_audit, eq_audit, datos_liga["tabla"])
+        
+        st.markdown("---")
+        st.subheader(f"📋 Radiografía Global de Temporada: {eq_audit}")
+        
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Posición en Liga", f"{audit_res['posicion']}º lugar")
+        m2.metric("Eficiencia Total", f"{audit_res['eficiencia']}%")
+        m3.metric("Goles Favor (Prom)", f"{audit_res['prom_gf']}")
+        m4.metric("Goles Contra (Prom)", f"{audit_res['prom_gc']}")
+        
+        # --- DESGLOSE CRUZADO: LOCAL VS VISITANTE ---
+        st.markdown("---")
+        st.subheader("🏠 vs ✈️ Comportamiento Cruzado (Casa y Fuera)")
+        
+        col_l_audit, col_v_audit = st.columns(2)
+        
+        with col_l_audit:
+            st.markdown(f"#### 🏠 Rendimiento en Casa (Local)")
+            pj_l = stats_audit["PJ_L"]
+            pts_l = stats_audit["Pts_L"]
+            ef_l = round((pts_l / (pj_l * 3)) * 100, 1) if pj_l > 0 else 0.0
+            st.write(f"- **Partidos Jugados:** `{pj_l}`")
+            st.write(f"- **Pts / G - E - P:** `{pts_l} pts` ({stats_audit['PG_L']}G - {stats_audit['PE_L']}E - {stats_audit['PP_L']}P)")
+            st.write(f"- **Goles (F / C / DG):** `{stats_audit['GF_L']} GF` / `{stats_audit['GC_L']} GC` (DG: `{stats_audit['DG_L']}`)")
+            st.metric("Eficiencia Local", f"{ef_l}%")
+            
+        with col_v_audit:
+            st.markdown(f"#### ✈️ Rendimiento de Visitante (Fuera)")
+            pj_v = stats_audit["PJ_V"]
+            pts_v = stats_audit["Pts_V"]
+            ef_v = round((pts_v / (pj_v * 3)) * 100, 1) if pj_v > 0 else 0.0
+            st.write(f"- **Partidos Jugados:** `{pj_v}`")
+            st.write(f"- **Pts / G - E - P:** `{pts_v} pts` ({stats_audit['PG_V']}G - {stats_audit['PE_V']}E - {stats_audit['PP_V']}P)")
+            st.write(f"- **Goles (F / C / DG):** `{stats_audit['GF_V']} GF` / `{stats_audit['GC_V']} GC` (DG: `{stats_audit['DG_V']}`)")
+            st.metric("Eficiencia Visitante", f"{ef_v}%")
+
+        st.markdown("---")
+        st.subheader("📈 Ciclo de Fibonacci y Estado de Inercia")
+        st.markdown(f"**Estado del Ciclo:** `{audit_res['fibo_estado']}`")
+        st.info(audit_res['fibo_mensaje'])
+        
+        st.markdown("---")
+        st.subheader("📊 Historial de Rachas Puras")
+        rc1, rc2 = st.columns(2)
+        rc1.write(f"- **Racha Actual Invicto (Sin Perder):** `{audit_res['rachas']['invicto']} partidos`")
+        rc2.write(f"- **Racha Actual Sequía (Sin Ganar):** `{audit_res['rachas']['sin_ganar']} partidos`")
+        
+        if audit_res['rachas']['ultimos']:
+            st.markdown("**Últimos 5 encuentros registrados del equipo:**")
+            df_ultimos = pd.DataFrame(audit_res['rachas']['ultimos'])
+            df_ultimos.columns = ["Condición", "Rival", "Resultado", "GF", "GC"]
+            st.dataframe(df_ultimos, use_container_width=True, hide_index=True)
+        else:
+            st.warning("No hay suficientes partidos registrados en el historial para mostrar el desglose.")
+
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (DOBLE CARRIL) ---
+with tab5:
+    st.header(f"🎯 Analizador Quirúrgico Elite - Doble Carril ({liga_sel})")
+    st.info("Arquitectura de Doble Carril: **Carril Normal** (análisis estadístico sobrio y fiable para la mayoría de partidos) y **Carril Francotirador** (Alerta Roja exclusiva de alta exigencia para anomalías de valor).")
     
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     cp1, cp2 = st.columns(2)
     with cp1:
-        p_local = st.selectbox("Local", equipos_disponibles, key="sync_loc")
+        p_local = st.selectbox("Equipo Local", equipos_disponibles, key="sync_loc")
     with cp2:
-        p_visita = st.selectbox("Visitante", equipos_disponibles, index=1 if len(equipos_disponibles)>1 else 0, key="sync_vis")
+        p_visita = st.selectbox("Equipo Visitante", equipos_disponibles, index=1 if len(equipos_disponibles)>1 else 0, key="sync_vis")
 
     if p_local == p_visita:
-        st.warning("Selecciona dos equipos diferentes.")
+        st.warning("⚠️ Selecciona dos equipos diferentes para realizar el análisis cruzado.")
     else:
-        stats_l = datos_liga["tabla"][p_local]
-        stats_v = datos_liga["tabla"][p_visita]
-        historial = datos_liga["historial"]
-        
-        res = motor_analisis_inteligente(stats_l, stats_v, historial, p_local, p_visita)
-        
-        st.markdown("---")
-        st.subheader("📊 Probabilidades Unificadas y Cuotas Justas (Montecarlo 10k)")
-        r1, r2, r3 = st.columns(3)
-        r1.metric(f"Victoria {p_local}", f"{res['p_local']}%", f"Cuota Justa: {res['cuota_l']}")
-        r2.metric("Empate", f"{res['p_empate']}%", f"Cuota Justa: {res['cuota_e']}")
-        r3.metric(f"Victoria {p_visita}", f"{res['p_visita']}%", f"Cuota Justa: {res['cuota_v']}")
-        
-        st.markdown("---")
-        st.subheader("⚽ Goles Esperados (xG Inteligente) & Filtro de Volatilidad Fibonacci")
-        xg1, xg2, xg3, xg4 = st.columns(4)
-        xg1.metric("xG Local (Forma)", res['xg_local'])
-        xg2.metric("xG Visitante (Forma)", res['xg_visita'])
-        xg3.metric("xG Total Sincronizado", res['xg_total'])
-        xg4.metric("Umbral Fibonacci (38.2%)", res['umbral_fibonacci'])
-        
-        st.markdown("---")
-        st.subheader("🎯 Top 5 Marcadores Exactos Más Probables")
-        st.markdown("Clasificación estocástica de los 5 resultados más recurrentes según la simulación conjunta:")
-        
-        # Construcción de tabla clara y limpia para los Top 5
-        top_data = []
-        for i, (gl_val, gv_val, prob_val) in enumerate(res['top_scores']):
-            top_data.append({
-                "Ranking": f"#{i+1}",
-                "Marcador Exacto": f"{p_local} {int(gl_val)} - {int(gv_val)} {p_visita}",
-                "Probabilidad Estocástica": f"{round(prob_val, 2)}%"
-            })
-        
-        df_top5 = pd.DataFrame(top_data)
-        st.dataframe(df_top5, use_container_width=True, hide_index=True)
+        if st.button("🔥 Ejecutar Análisis de Doble Carril", type="primary"):
+            stats_l = datos_liga["tabla"][p_local]
+            stats_v = datos_liga["tabla"][p_visita]
             
-        st.markdown("---")
-        st.subheader("💡 Consenso de Mercado y Recomendaciones")
-        m_rec1, m_rec2 = st.columns(2)
-        m_rec1.success(f"**Línea de Goles:** {res['rec_goles']}")
-        m_rec2.success(f"**Ambos Anotan (BTTS):** {res['ambos_marcan']}")
+            pj_l = max(1, stats_l["PJ"])
+            pj_v = max(1, stats_v["PJ"])
+            
+            # Promedios de goles reales
+            gf_l_prom = stats_l["GF"] / pj_l
+            gc_l_prom = stats_l["GC"] / pj_l
+            gf_v_prom = stats_v["GF"] / pj_v
+            gc_v_prom = stats_v["GC"] / pj_v
+            
+            # Tasas de Poisson (lambda)
+            lambda_local = (gf_l_prom + gc_v_prom) / 2
+            lambda_visita = (gf_v_prom + gc_l_prom) / 2
+            
+            # Matriz de probabilidad (0 a 5 goles)
+            matriz_prob = np.outer(
+                [poisson.pmf(i, lambda_local) for i in range(6)],
+                [poisson.pmf(j, lambda_visita) for j in range(6)]
+            )
+            
+            prob_local = np.sum(np.tril(matriz_prob, -1)) * 100
+            prob_empate = np.sum(np.diagonal(matriz_prob)) * 100
+            prob_visita = np.sum(np.triu(matriz_prob, 1)) * 100
+            
+            # ----------------------------------------------------
+            # CARRIL 1: MODO NORMAL (Análisis base sobrio y directo)
+            # ----------------------------------------------------
+            st.markdown("---")
+            st.subheader("📊 Carril 1: Diagnóstico Estadístico (Modo Normal)")
+            col_r1, col_r2, col_r3 = st.columns(3)
+            col_r1.metric(f"Victoria {p_local}", f"{prob_local:.1f}%")
+            col_r2.metric("Empate Técnico", f"{prob_empate:.1f}%")
+            col_r3.metric(f"Victoria {p_visita}", f"{prob_visita:.1f}%")
+            
+            if prob_local > prob_visita and prob_local > prob_empate:
+                veredicto_normal = f"Tendencia lógica favorable al local (**{p_local}**). Comportamiento de mercado estándar."
+            elif prob_visita > prob_local and prob_visita > prob_empate:
+                veredicto_normal = f"Tendencia favorable al visitante (**{p_visita}**). Resistencia visitante identificada."
+            else:
+                veredicto_normal = "Tendencia a paridad o partido cerrado de alta fricción táctica."
+            
+            st.info(f"💡 **Lectura Base:** {veredicto_normal}")
+            
+            # ----------------------------------------------------
+            # CARRIL 2: MODO FRANCOTIRADOR (Alerta Roja Ultra-Exclusiva)
+            # ----------------------------------------------------
+            st.markdown("---")
+            st.subheader("🚨 Carril 2: Radar de Alerta Roja (Modo Francotirador)")
+            
+            UMBRAL_FRANCOTIRADOR = 78.0
+            UMBRAL_VISITANTE_ELITE = 70.0
+            
+            if prob_local >= UMBRAL_FRANCOTIRADOR:
+                st.error(
+                    f"🎯 **¡ALERTA ROJA DE FRANCOTIRADOR ACTIVADA (CARRIL 2)!**\n\n"
+                    f"* **Objetivo de Oro:** Victoria aplastante de **{p_local}** con un nivel de confianza matemático del **{prob_local:.1f}%**.\n"
+                    f"* **Veredicto de Élite:** Supera el filtro estricto de inercia y solidez. Inclusión obligatoria en tu combinada alta."
+                )
+            elif prob_visita >= UMBRAL_VISITANTE_ELITE:
+                st.error(
+                    f"🎯 **¡ALERTA ROJA DE FRANCOTIRADOR ACTIVADA (CARRIL 2)!**\n\n"
+                    f"* **Objetivo de Oro:** Asalto táctico de **{p_visita}** con un {prob_visita:.1f}% de probabilidad.\n"
+                    f"* **Veredicto de Élite:** Anomalía de valor detectada en la defensa rival. Cuota de alta rentabilidad lista para cazar."
+                )
+            else:
+                st.success(
+                    f"🛡️ **Carril Normal Activo — Sin Alerta Roja**\n\n"
+                    f"* El partido no alcanza el umbral de exigencia extrema ({UMBRAL_FRANCOTIRADOR}%+). El sistema opera de forma sobria, protegiendo tu bankroll de falsas alarmas. Partido apto para análisis tradicional."
+                )
 
