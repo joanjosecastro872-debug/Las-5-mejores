@@ -10,7 +10,7 @@ from scipy.stats import poisson
 # 1. CONFIGURACIÓN BASE Y ESTILO MÓVIL
 # ==========================================
 st.set_page_config(
-    page_title="Zohan Pronostic v6.2 - Auditoría y Marcadores Exactos",
+    page_title="Zohan Pronostic v6.5 - Elite Fibonacci, H2H 10 & Top 5",
     page_icon="⚽",
     layout="wide"
 )
@@ -151,15 +151,6 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
     eq_l["DG"] = eq_l["GF"] - eq_l["GC"]
     eq_l["Pts"] += factor * pts_l
 
-    eq_l["PJ_L"] += factor * 1
-    eq_l["PG_L"] += factor * pg_l
-    eq_l["PE_L"] += factor * pe_l
-    eq_l["PP_L"] += factor * pp_l
-    eq_l["GF_L"] += factor * gl
-    eq_l["GC_L"] += factor * gv
-    eq_l["DG_L"] = eq_l["GF_L"] - eq_l["GC_L"]
-    eq_l["Pts_L"] += factor * pts_l
-
     eq_v = tabla[visitante]
     eq_v["PJ"] += factor * 1
     eq_v["PG"] += factor * pg_v
@@ -170,77 +161,31 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
     eq_v["DG"] = eq_v["GF"] - eq_v["GC"]
     eq_v["Pts"] += factor * pts_v
 
-    eq_v["PJ_V"] += factor * 1
-    eq_v["PG_V"] += factor * pg_v
-    eq_v["PE_V"] += factor * pe_v
-    eq_v["PP_V"] += factor * pp_v
-    eq_v["GF_V"] += factor * gv
-    eq_v["GC_V"] += factor * gl
-    eq_v["DG_V"] = eq_v["GF_V"] - eq_v["GC_V"]
-    eq_v["Pts_V"] += factor * pts_v
+def calcular_fibonacci_y_tendencia(stats_eq, historial, equipo):
+    pj = max(1, stats_eq["PJ"])
+    pts = stats_eq["Pts"]
+    eficiencia = round((pts / (pj * 3)) * 100, 1) if pj > 0 else 0.0
+    ratio_rendimiento = eficiencia / 100.0
 
-def calcular_rachas_completas(historial, equipo):
-    partidos = []
-    for p in historial:
-        if p['local'] == equipo:
-            res = "G" if p['goles_local'] > p['goles_visita'] else ("E" if p['goles_local'] == p['goles_visita'] else "P")
-            partidos.append({"condicion": "Local", "rival": p['visitante'], "res": res, "gf": p['goles_local'], "gc": p['goles_visita']})
-        elif p['visitante'] == equipo:
-            res = "G" if p['goles_visita'] > p['goles_local'] else ("E" if p['goles_visita'] == p['goles_local'] else "P")
-            partidos.append({"condicion": "Visitante", "rival": p['local'], "res": res, "gf": p['goles_visita'], "gc": p['goles_local']})
-            
-    if not partidos:
-        return {"invicto": 0, "sin_ganar": 0, "ultimos": []}
-        
-    invicto = 0
-    for p in reversed(partidos):
-        if p['res'] in ["G", "E"]:
-            invicto += 1
-        else:
-            break
-            
-    sin_ganar = 0
-    for p in reversed(partidos):
-        if p['res'] in ["E", "P"]:
-            sin_ganar += 1
-        else:
-            break
-            
+    if ratio_rendimiento <= 0.35:
+        fibo_estado = "Soporte Crítico (0.382) - Toca Fondo / Rebote Inminente"
+        fibo_mensaje = "Zona de soporte profundo en retroceso de Fibonacci. Acumula presión extrema, ideal para rebote alcista."
+        tendencia = "Bajista Agotada (Alta probabilidad de corrección positiva)"
+    elif ratio_rendimiento >= 0.70:
+        fibo_estado = "Zona de Resistencia Alta (0.236) - Techo de Rendimiento"
+        fibo_mensaje = "Parte alta de la curva de Fibonacci. Muestra máxima solidez pero con riesgo de corrección a la baja si decae la intensidad."
+        tendencia = "Alcista Sólida (Inercia ganadora dominante)"
+    else:
+        fibo_estado = "Zona de Transición Neutral (0.500 - 0.618)"
+        fibo_mensaje = "Rango de equilibrio intermedio en la onda de Fibonacci, dependiente de los ajustes tácticos del encuentro."
+        tendencia = "Estable / Transición Moderada"
+
     return {
-        "invicto": invicto,
-        "sin_ganar": sin_ganar,
-        "ultimos": partidos[-5:]
+        "eficiencia": eficiencia,
+        "fibo_estado": fibo_estado,
+        "fibo_mensaje": fibo_mensaje,
+        "tendencia": tendencia
     }
-
-def calcular_head_to_head(historial, eq1, eq2, modo="Global"):
-    enfrentamientos = []
-    v_eq1 = 0
-    v_eq2 = 0
-    empates = 0
-    
-    for p in historial:
-        if modo == "Global":
-            match_cond = (p['local'] == eq1 and p['visitante'] == eq2) or (p['local'] == eq2 and p['visitante'] == eq1)
-        else:
-            match_cond = (p['local'] == eq1 and p['visitante'] == eq2)
-            
-        if match_cond:
-            enfrentamientos.append(p)
-            if p['goles_local'] > p['goles_visita']:
-                ganador = p['local']
-            elif p['goles_local'] < p['goles_visita']:
-                ganador = p['visitante']
-            else:
-                ganador = "Empate"
-                
-            if ganador == eq1:
-                v_eq1 += 1
-            elif ganador == eq2:
-                v_eq2 += 1
-            else:
-                empates += 1
-                
-    return enfrentamientos, v_eq1, v_eq2, empates
 
 def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
     goles_l = np.random.poisson(lambda_l, n_simulaciones)
@@ -257,7 +202,6 @@ def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
     return p_l, p_e, p_v, goles_l, goles_v
 
 def calcular_top_marcadores_exactos(lambda_l, lambda_v, top_n=5):
-    """Calcula la matriz de Poisson y extrae los top N marcadores más probables"""
     goles_max = 6
     pmf_l = poisson.pmf(np.arange(goles_max), lambda_l)
     pmf_v = poisson.pmf(np.arange(goles_max), lambda_v)
@@ -276,45 +220,6 @@ def calcular_top_marcadores_exactos(lambda_l, lambda_v, top_n=5):
             
     resultados_ordenados = sorted(resultados, key=lambda x: x["Probabilidad (%)"], reverse=True)
     return resultados_ordenados[:top_n]
-
-def ejecutar_auditoria_equipo(stats_eq, historial, equipo, tabla_liga):
-    pj = max(1, stats_eq["PJ"])
-    pg = stats_eq["PG"]
-    pe = stats_eq["PE"]
-    pp = stats_eq["PP"]
-    gf = stats_eq["GF"]
-    gc = stats_eq["GC"]
-    pts = stats_eq["Pts"]
-    
-    eficiencia = round((pts / (pj * 3)) * 100, 1) if pj > 0 else 0.0
-    prom_gf = round(gf / pj, 2)
-    prom_gc = round(gc / pj, 2)
-    
-    rachas = calcular_rachas_completas(historial, equipo)
-    ratio_rendimiento = eficiencia / 100.0
-    
-    if ratio_rendimiento <= 0.35 or rachas["sin_ganar"] >= 3:
-        fibo_estado = "Soporte Crítico (0.382) - Toca Fondo"
-        fibo_mensaje = "Zona de soporte profundo. Acumula presión extrema, ideal para un impulso alcista sorpresivo."
-    elif ratio_rendimiento >= 0.70:
-        fibo_estado = "Zona de Resistencia Alta (0.236)"
-        fibo_mensaje = "Parte alta de la curva. Muestra solidez pero expuesto a correcciones si baja la intensidad."
-    else:
-        fibo_estado = "Zona de Transición Neutral"
-        fibo_mensaje = "Rango de estabilidad media dependiente de ajustes tácticos."
-
-    lista_ord = sorted(tabla_liga.items(), key=lambda x: (x[1]["Pts"], x[1]["DG"], x[1]["GF"]), reverse=True)
-    posicion = len(tabla_liga)
-    for idx, (eq, _) in enumerate(lista_ord):
-        if eq == equipo:
-            posicion = idx + 1
-            break
-
-    return {
-        "pj": pj, "pg": pg, "pe": pe, "pp": pp, "gf": gf, "gc": gc, "pts": pts,
-        "eficiencia": eficiencia, "prom_gf": prom_gf, "prom_gc": prom_gc,
-        "posicion": posicion, "rachas": rachas, "fibo_estado": fibo_estado, "fibo_mensaje": fibo_mensaje
-    }
 
 # ==========================================
 # 3. INTERFAZ STREAMLIT
@@ -450,21 +355,20 @@ with tab4:
     
     if eq_audit:
         stats_audit = datos_liga["tabla"][eq_audit]
-        historial_audit = datos_liga["historial"]
-        audit_res = ejecutar_auditoria_equipo(stats_audit, historial_audit, eq_audit, datos_liga["tabla"])
+        fibo_audit = calcular_fibonacci_y_tendencia(stats_audit, datos_liga["historial"], eq_audit)
         
         st.markdown("---")
-        st.subheader(f"📋 Radiografía Global de Temporada: {eq_audit}")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Posición en Liga", f"{audit_res['posicion']}º lugar")
-        m2.metric("Eficiencia Total", f"{audit_res['eficiencia']}%")
-        m3.metric("Goles Favor (Prom)", f"{audit_res['prom_gf']}")
-        m4.metric("Goles Contra (Prom)", f"{audit_res['prom_gc']}")
+        st.subheader(f"📋 Radiografía Global & Fibonacci: {eq_audit}")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Eficiencia Total", f"{fibo_audit['eficiencia']}%")
+        m2.metric("Tendencia Actual", fibo_audit['tendencia'])
+        m3.metric("Nivel Fibonacci", fibo_audit['fibo_estado'])
+        st.info(f"💡 **Nota Táctica:** {fibo_audit['fibo_mensaje']}")
 
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (CON MENSAJE Y TOP 5 MARCADORES EXACTOS) ---
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE ---
 with tab5:
-    st.header(f"🎯 Analizador Quirúrgico Elite - Motor Dual & H2H ({liga_sel})")
-    st.info("Arquitectura de Alta Precisión: Poisson, Monte Carlo (10,000 escenarios), H2H configurable, Top 5 Marcadores Exactos y Mensaje Táctico.")
+    st.header(f"🎯 Analizador Quirúrgico Elite - Fibonacci, H2H Manual & Top 5 Exactos ({liga_sel})")
+    st.info("Introduce los datos globales a mano, configura el registro manual de los últimos 10 partidos cara a cara (H2H) y ejecuta el motor estocástico.")
     
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     cp1, cp2 = st.columns(2)
@@ -473,88 +377,87 @@ with tab5:
     with cp2:
         p_visita = st.selectbox("Equipo Visitante", equipos_disponibles, index=1 if len(equipos_disponibles)>1 else 0, key="sync_vis")
 
-    st.markdown("---")
-    modo_h2h_sel = st.radio(
-        "🎛️ **Seleccionar Modo de Análisis Head-to-Head (H2H):**",
-        ["Global (Todos los enfrentamientos entre ambos)", "Estricto (Solo cuando el local juega en casa ante este visitante)"],
-        horizontal=True
-    )
-    filtro_h2h_modo = "Global" if "Global" in modo_h2h_sel else "Estricto"
+    stats_l_base = datos_liga["tabla"][p_local]
+    stats_v_base = datos_liga["tabla"][p_visita]
 
+    st.markdown("---")
+    with st.expander("✍️ 1. Ingreso Manual de Datos Globales", expanded=True):
+        mc_col1, mc_col2 = st.columns(2)
+        with mc_col1:
+            st.markdown(f"**🏠 Anfitrión: {p_local}**")
+            m_pj_l = st.number_input("Partidos Jugados (PJ)", min_value=1, value=int(stats_l_base["PJ"] if stats_l_base["PJ"] > 0 else 1), key="m_pj_l")
+            m_gf_l = st.number_input("Goles a Favor (GF)", min_value=0, value=int(stats_l_base["GF"]), key="m_gf_l")
+            m_gc_l = st.number_input("Goles en Contra (GC)", min_value=0, value=int(stats_l_base["GC"]), key="m_gc_l")
+        with mc_col2:
+            st.markdown(f"**✈️ Visitante: {p_visita}**")
+            m_pj_v = st.number_input("Partidos Jugados (PJ) ", min_value=1, value=int(stats_v_base["PJ"] if stats_v_base["PJ"] > 0 else 1), key="m_pj_v")
+            m_gf_v = st.number_input("Goles a Favor (GF) ", min_value=0, value=int(stats_v_base["GF"]), key="m_gf_v")
+            m_gc_v = st.number_input("Goles en Contra (GC) ", min_value=0, value=int(stats_v_base["GC"]), key="m_gc_v")
+
+    with st.expander("⚔️ 2. Ingreso Manual: Últimos 10 Partidos Cara a Cara (H2H)", expanded=True):
+        st.write("Registra el balance directo de los últimos 10 enfrentamientos entre ambos:")
+        h2h_c1, h2h_c2, h2h_c3 = st.columns(3)
+        with h2h_c1:
+            m_h2h_v_loc = st.number_input(f"Victorias de {p_local}", min_value=0, max_value=10, value=3, key="h2h_vl")
+        with h2h_c2:
+            m_h2h_emp = st.number_input("Empates", min_value=0, max_value=10, value=3, key="h2h_pe")
+        with h2h_c3:
+            m_h2h_v_vis = st.number_input(f"Victorias de {p_visita}", min_value=0, max_value=10, value=4, key="h2h_vv")
+
+    st.markdown("---")
     if p_local == p_visita:
         st.warning("⚠️ Selecciona dos equipos diferentes para realizar el análisis cruzado.")
     else:
-        if st.button("🔥 Ejecutar Simulación Estocástica & Top 5 Marcadores", type="primary"):
-            stats_l = datos_liga["tabla"][p_local]
-            stats_v = datos_liga["tabla"][p_visita]
+        if st.button("🔥 Ejecutar Simulación Estocástica & Top 5 Marcadores Exactos", type="primary"):
+            fibo_l = calcular_fibonacci_y_tendencia(stats_l_base, datos_liga["historial"], p_local)
+            fibo_v = calcular_fibonacci_y_tendencia(stats_v_base, datos_liga["historial"], p_visita)
             
-            pj_l = max(1, stats_l["PJ"])
-            pj_v = max(1, stats_v["PJ"])
-            
-            audit_l = ejecutar_auditoria_equipo(stats_l, datos_liga["historial"], p_local, datos_liga["tabla"])
-            audit_v = ejecutar_auditoria_equipo(stats_v, datos_liga["historial"], p_visita, datos_liga["tabla"])
-            
-            gf_l_prom = stats_l["GF"] / pj_l
-            gc_l_prom = stats_l["GC"] / pj_l
-            gf_v_prom = stats_v["GF"] / pj_v
-            gc_v_prom = stats_v["GC"] / pj_v
+            gf_l_prom = m_gf_l / m_pj_l
+            gc_l_prom = m_gc_l / m_pj_l
+            gf_v_prom = m_gf_v / m_pj_v
+            gc_v_prom = m_gc_v / m_pj_v
             
             lambda_local = (gf_l_prom + gc_v_prom) / 2
             lambda_visita = (gf_v_prom + gc_l_prom) / 2
             
-            # Monte Carlo
             mc_prob_l, mc_prob_e, mc_prob_v, sim_gl, sim_gv = simular_monte_carlo(lambda_local, lambda_visita, 10000)
             prom_sim_gl = np.mean(sim_gl)
             prom_sim_gv = np.mean(sim_gv)
 
-            # Top 5 Marcadores Exactos por Poisson
             top_marcadores = calcular_top_marcadores_exactos(lambda_local, lambda_visita, 5)
 
-            # H2H
-            h2h_partidos, v_l_h2h, v_v_h2h, emp_h2h = calcular_head_to_head(datos_liga["historial"], p_local, p_visita, filtro_h2h_modo)
-            total_h2h = len(h2h_partidos)
-
-            # ====================================================
-            # MÓDULO DE MENSAJE Y DESGLOSE TÁCTICO TOTAL
-            # ====================================================
             st.markdown("---")
-            st.subheader("📋 Mensaje y Desglose Táctico Total del Partido")
+            st.subheader("📋 Mensaje y Desglose Táctico Integral (Fibonacci & Tendencia)")
             
             msg_clima = f"### 🏟️ Radiografía del Encuentro: {p_local} vs {p_visita}\n\n"
             
-            msg_clima += f"#### 1️⃣ Estado de Forma y Posición\n"
-            msg_clima += f"- **{p_local} (Local):** Ubicado en el **puesto {audit_l['posicion']}º** con eficiencia del **{audit_l['eficiencia']}%**. Estado inercial: *{audit_l['fibo_estado']}* (Invicto actual: `{audit_l['rachas']['invicto']}`, Sequía: `{audit_l['rachas']['sin_ganar']}`). Promedia en casa `{audit_l['prom_gf']} GF` / `{audit_l['prom_gc']} GC`.\n"
-            msg_clima += f"- **{p_visita} (Visitante):** Ubicado en el **puesto {audit_v['posicion']}º** con eficiencia del **{audit_v['eficiencia']}%**. Estado inercial: *{audit_v['fibo_estado']}* (Invicto actual: `{audit_v['rachas']['invicto']}`, Sequía: `{audit_v['rachas']['sin_ganar']}`). Promedia fuera `{audit_v['prom_gf']} GF` / `{audit_v['prom_gc']} GC`.\n\n"
+            msg_clima += f"#### 1️⃣ Tendencias y Niveles de Fibonacci\n"
+            msg_clima += f"- **{p_local} (Local):** Tendencia: *{fibo_l['tendencia']}* | Nivel: **{fibo_l['fibo_estado']}**.\n  > *{fibo_l['fibo_mensaje']}*\n"
+            msg_clima += f"- **{p_visita} (Visitante):** Tendencia: *{fibo_v['tendencia']}* | Nivel: **{fibo_v['fibo_estado']}**.\n  > *{fibo_v['fibo_mensaje']}*\n\n"
             
-            msg_clima += f"#### 2️⃣ Motor Matemático (Monte Carlo & Poisson)\n"
+            msg_clima += f"#### 2️⃣ Historial Cara a Cara Manual (Últimos 10 partidos)\n"
+            msg_clima += f"- Balance ingresado: `{m_h2h_v_loc}` victorias para {p_local} | `{m_h2h_emp}` empates | `{m_h2h_v_vis}` victorias para {p_visita}.\n\n"
+            
+            msg_clima += f"#### 3️⃣ Motor Matemático (Monte Carlo & Poisson)\n"
             msg_clima += f"- **Expectativa de Goles (Lambda):** Local: `{prom_sim_gl:.2f}` | Visitante: `{prom_sim_gv:.2f}`.\n"
             msg_clima += f"- **Probabilidades de Resultado:** Victoria Local: **{mc_prob_l:.1f}%** | Empate: **{mc_prob_e:.1f}%** | Victoria Visitante: **{mc_prob_v:.1f}%**.\n\n"
             
-            msg_clima += f"#### 3️⃣ Top 5 Posibles Marcadores Exactos\n"
+            msg_clima += f"#### 4️⃣ Top 5 Posibles Marcadores Exactos\n"
             for idx, m in enumerate(top_marcadores, 1):
                 msg_clima += f"  {idx}. **{m['Marcador']}** (Probabilidad: **{m['Probabilidad (%)']}%**)\n"
             msg_clima += "\n"
             
-            msg_clima += f"#### 4️⃣ Historial Cruzado ({filtro_h2h_modo})\n"
-            if total_h2h > 0:
-                msg_clima += f"- Se registraron **{total_h2h} enfrentamientos previos**: `{v_l_h2h}` victorias para {p_local}, `{emp_h2h}` empates y `{v_v_h2h}` victorias para {p_visita}.\n\n"
-            else:
-                msg_clima += f"- No existen enfrentamientos previos registrados bajo el filtro `{filtro_h2h_modo}`.\n\n"
-                
             if mc_prob_l > mc_prob_v and mc_prob_l > mc_prob_e:
-                veredicto_final = f"**Veredicto Táctico:** Escenario inclinado a favor del anfitrión (**{p_local}**). Su localía y el modelo estocástico respaldan el favoritismo."
+                veredicto_final = f"**Veredicto Táctico:** Escenario inclinado a favor del anfitrión (**{p_local}**). La inercia y los soportes respaldan el favoritismo."
             elif mc_prob_v > mc_prob_l and mc_prob_v > mc_prob_e:
                 veredicto_final = f"**Veredicto Táctico:** Alerta de golpe foráneo. El visitante (**{p_visita}**) muestra argumentos numéricos idóneos para puntuar fuera de casa."
             else:
-                veredicto_final = f"**Veredicto Táctico:** Partido de máxima paridad. Las simulaciones apuntan a un duelo cerrado donde los detalles definirán el marcador exacto."
+                veredicto_final = f"**Veredicto Táctico:** Partido de máxima paridad. Las curvas de Fibonacci apuntan a un duelo cerrado donde los detalles definirán el marcador."
                 
             msg_clima += f"#### 🎯 Conclusión del Analizador\n{veredicto_final}"
             
             st.success(msg_clima)
 
-            # ----------------------------------------------------
-            # VISUALIZACIÓN DE MÉTRICAS Y TABLA DE TOP 5 MARCADORES
-            # ----------------------------------------------------
             st.markdown("---")
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric(f"Victoria {p_local}", f"{mc_prob_l:.1f}%", f"Goles: {prom_sim_gl:.2f}")
@@ -566,16 +469,6 @@ with tab5:
             df_marcadores = pd.DataFrame(top_marcadores)
             st.dataframe(df_marcadores, use_container_width=True, hide_index=True)
 
-            if total_h2h > 0:
-                st.markdown("---")
-                st.subheader(f"⚔️ Detalle H2H ({filtro_h2h_modo})")
-                df_h2h = pd.DataFrame(h2h_partidos)
-                df_h2h.columns = ["Local", "Visitante", "Goles Local", "Goles Visitante"]
-                st.dataframe(df_h2h, use_container_width=True, hide_index=True)
-
-            # ----------------------------------------------------
-            # CARRIL FRANCOTIRADOR (ALERTA ROJA)
-            # ----------------------------------------------------
             st.markdown("---")
             st.subheader("🚨 Radar de Alerta Roja (Modo Francotirador)")
             UMBRAL_FRANCOTIRADOR = 78.0
