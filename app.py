@@ -10,7 +10,7 @@ from scipy.stats import poisson
 # 1. CONFIGURACIÓN BASE Y ESTILO MÓVIL
 # ==========================================
 st.set_page_config(
-    page_title="Zohan Pronostic v6.5 - Elite Fibonacci, H2H 10 & Top 5",
+    page_title="Zohan Pronostic v6.5 - Elite Fibonacci, H2H & Top 5",
     page_icon="⚽",
     layout="wide"
 )
@@ -367,8 +367,8 @@ with tab4:
 
 # --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE ---
 with tab5:
-    st.header(f"🎯 Analizador Quirúrgico Elite - Fibonacci, H2H Manual & Top 5 Exactos ({liga_sel})")
-    st.info("Introduce los datos globales a mano, configura el registro manual de los últimos 10 partidos cara a cara (H2H) y ejecuta el motor estocástico.")
+    st.header(f"🎯 Analizador Quirúrgico Elite - Fibonacci, H2H & Top 5 ({liga_sel})")
+    st.info("Los datos globales se extraen automáticamente de la tabla de posiciones. Registra abajo el historial cara a cara (H2H) y ejecuta el motor.")
     
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     cp1, cp2 = st.columns(2)
@@ -380,21 +380,26 @@ with tab5:
     stats_l_base = datos_liga["tabla"][p_local]
     stats_v_base = datos_liga["tabla"][p_visita]
 
-    st.markdown("---")
-    with st.expander("✍️ 1. Ingreso Manual de Datos Globales", expanded=True):
-        mc_col1, mc_col2 = st.columns(2)
-        with mc_col1:
-            st.markdown(f"**🏠 Anfitrión: {p_local}**")
-            m_pj_l = st.number_input("Partidos Jugados (PJ)", min_value=1, value=int(stats_l_base["PJ"] if stats_l_base["PJ"] > 0 else 1), key="m_pj_l")
-            m_gf_l = st.number_input("Goles a Favor (GF)", min_value=0, value=int(stats_l_base["GF"]), key="m_gf_l")
-            m_gc_l = st.number_input("Goles en Contra (GC)", min_value=0, value=int(stats_l_base["GC"]), key="m_gc_l")
-        with mc_col2:
-            st.markdown(f"**✈️ Visitante: {p_visita}**")
-            m_pj_v = st.number_input("Partidos Jugados (PJ) ", min_value=1, value=int(stats_v_base["PJ"] if stats_v_base["PJ"] > 0 else 1), key="m_pj_v")
-            m_gf_v = st.number_input("Goles a Favor (GF) ", min_value=0, value=int(stats_v_base["GF"]), key="m_gf_v")
-            m_gc_v = st.number_input("Goles en Contra (GC) ", min_value=0, value=int(stats_v_base["GC"]), key="m_gc_v")
+    # Extracción automática estricta desde la tabla de posiciones
+    m_pj_l = max(1, stats_l_base["PJ_L"])
+    m_gf_l = stats_l_base["GF_L"]
+    m_gc_l = stats_l_base["GC_L"]
 
-    with st.expander("⚔️ 2. Ingreso Manual: Últimos 10 Partidos Cara a Cara (H2H)", expanded=True):
+    m_pj_v = max(1, stats_v_base["PJ_V"])
+    m_gf_v = stats_v_base["GF_V"]
+    m_gc_v = stats_v_base["GC_V"]
+
+    with st.expander("📊 Datos Extraídos Automáticamente de la Tabla", expanded=False):
+        ex_c1, ex_c2 = st.columns(2)
+        with ex_c1:
+            st.markdown(f"**🏠 Local ({p_local}) [Como Local]:**")
+            st.write(f"- PJ: `{m_pj_l}` | GF: `{m_gf_l}` | GC: `{m_gc_l}`")
+        with ex_c2:
+            st.markdown(f"**✈️ Visitante ({p_visita}) [Como Visitante]:**")
+            st.write(f"- PJ: `{m_pj_v}` | GF: `{m_gf_v}` | GC: `{m_gc_v}`")
+
+    st.markdown("---")
+    with st.expander("⚔️ Ingreso Manual: Últimos 10 Partidos Cara a Cara (H2H)", expanded=True):
         st.write("Registra el balance directo de los últimos 10 enfrentamientos entre ambos:")
         h2h_c1, h2h_c2, h2h_c3 = st.columns(3)
         with h2h_c1:
