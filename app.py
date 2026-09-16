@@ -1,3 +1,4 @@
+# /mount/src/las-5-mejores/app.py
 import json
 import os
 import numpy as np
@@ -21,13 +22,17 @@ st.markdown(
     """
     <style>
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        overflow-x: auto;
-        white-space: nowrap;
+        gap: 4px;
+        flex-wrap: wrap;
+        white-space: normal;
     }
     .stTabs [data-baseweb="tab"] {
-        height: 45px;
-        white-space: nowrap;
+        height: auto;
+        min-height: 40px;
+        white-space: normal;
+        text-align: center;
+        padding: 6px 12px;
+        font-size: 13px;
     }
     </style>
 """,
@@ -391,12 +396,13 @@ if archivo_subido is not None:
   except Exception:
     st.sidebar.error("Archivo .txt inválido.")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Tabla de Posiciones",
     "⚙️ Carga Directa Avanzada",
     "📝 Registrar Partido",
     "🔬 Auditoría Global y Cruzada",
     "🎯 Analizador Quirúrgico Elite",
+    "🌍 Analizador Universal",
 ])
 
 # --- TAB 1: TABLA DE POSICIONES ---
@@ -728,6 +734,9 @@ with tab5:
       prom_sim_gl = np.mean(sim_gl)
       prom_sim_gv = np.mean(sim_gv)
 
+      # Cálculo de Ambos Anotan (BTTS)
+      btts_prob = np.mean((sim_gl > 0) & (sim_gv > 0)) * 100
+
       top_marcadores = calcular_top_marcadores_exactos(
           lambda_local, lambda_visita, 5
       )
@@ -782,7 +791,11 @@ with tab5:
       msg_clima += (
           "- **Probabilidades de Resultado:** Victoria Local:"
           f" **{mc_prob_l:.1f}%** | Empate: **{mc_prob_e:.1f}%** | Victoria"
-          f" Visitante: **{mc_prob_v:.1f}%**.\n\n"
+          f" Visitante: **{mc_prob_v:.1f}%**.\n"
+      )
+      msg_clima += (
+          f"- **Probabilidad de Ambos Equipos Anotan (BTTS):**"
+          f" **{btts_prob:.1f}%**\n\n"
       )
 
       msg_clima += f"#### 4️⃣ Top 5 Posibles Marcadores Exactos\n"
@@ -864,14 +877,15 @@ with tab5:
         )
 
       # ==========================================
-      # 🛡️ NUEVAS HERRAMIENTAS 100% AUTOMÁTICAS PARA PARLAYS
+      # 🛡️ PANEL DE BLINDAJE AUTOMÁTICO PARA PARLAYS (LIGAS)
       # ==========================================
       st.markdown("---")
       st.subheader("🛡️ Panel de Blindaje Automático para Parlays")
 
-      t_sub1, t_sub2, t_sub3 = st.tabs([
+      t_sub1, t_sub2, t_sub3, t_sub4 = st.tabs([
           "🛡️ Termómetro de Hándicap",
           "⚽ Filtro Automático de Goles",
+          "🔥 Mercado BTTS (Ambos Anotan)",
           "🌟 Fortaleza Relativa vs Liga",
       ])
 
@@ -945,6 +959,25 @@ with tab5:
           st.info("⚖️ **Filtro de Goles:** Comportamiento estándar de goles.")
 
       with t_sub3:
+        st.markdown("### Análisis del Mercado Ambos Equipos Anotan (BTTS)")
+        st.metric("Probabilidad de BTTS (Sí Marcan Ambos)", f"{btts_prob:.1f}%")
+        if btts_prob >= 62:
+          st.success(
+              "🔥 **Mercado BTTS:** Excelente opción para combinada. Alta"
+              " probabilidad de intercambio de goles."
+          )
+        elif btts_prob <= 40:
+          st.warning(
+              "⚠️ **Mercado BTTS:** Tendencia baja. Riesgo de que uno de los"
+              " dos equipos se quede sin anotar."
+          )
+        else:
+          st.info(
+              "⚖️ **Mercado BTTS:** Comportamiento estándar sin polarización"
+              " extrema."
+          )
+
+      with t_sub4:
         st.markdown("### Comparativa de Desempeño Relativo vs Media")
         media_liga_goles = (
             (m_gf_l + m_gf_v) / (m_pj_l + m_pj_v)
@@ -979,4 +1012,204 @@ with tab5:
               "ℹ️ **Fortaleza Relativa:** Comportamiento competitivo normal sin"
               " anomalías extremas."
           )
+
+# --- TAB 6: ANALIZADOR UNIVERSAL ---
+with tab6:
+  st.header(
+      "🌍 Analizador Universal (Examen Global + Local/Afuera + H2H + BTTS)"
+  )
+  st.info(
+      "Introduce la información completa de cualquier partido del mundo:"
+      " rendimiento global de temporada, comportamiento específico de"
+      " local/afuera y duelos directos."
+  )
+
+  col_t1, col_t2 = st.columns(2)
+  with col_t1:
+    lib_local = st.text_input(
+        "Nombre del Equipo Local", value="Real Madrid", key="lib_eq_l"
+    )
+  with col_t2:
+    lib_visita = st.text_input(
+        "Nombre del Equipo Visitante", value="Barcelona", key="lib_eq_v"
+    )
+
+  st.markdown("---")
+  st.subheader(
+      "🌐 1. Examen Global de Temporada (Indiferente de Local o Visitante)"
+  )
+  g_col1, g_col2 = st.columns(2)
+  with g_col1:
+    st.markdown(f"**{lib_local} (Totales Temporada)**")
+    g_pj_l = st.number_input(
+        "Partidos Totales Jugados", min_value=1, value=20, key="g_pj_l"
+    )
+    g_gf_l = st.number_input(
+        "Goles Totales a Favor", min_value=0.0, value=38.0, key="g_gf_l"
+    )
+    g_gc_l = st.number_input(
+        "Goles Totales en Contra", min_value=0.0, value=18.0, key="g_gc_l"
+    )
+  with g_col2:
+    st.markdown(f"**{lib_visita} (Totales Temporada)**")
+    g_pj_v = st.number_input(
+        "Partidos Totales Jugados", min_value=1, value=20, key="g_pj_v"
+    )
+    g_gf_v = st.number_input(
+        "Goles Totales a Favor", min_value=0.0, value=35.0, key="g_gf_v"
+    )
+    g_gc_v = st.number_input(
+        "Goles Totales en Contra", min_value=0.0, value=20.0, key="g_gc_v"
+    )
+
+  st.markdown("---")
+  st.subheader("🏠 2. Desglose Específico (Local en Casa / Visitante Afuera)")
+  m_col1, m_col2 = st.columns(2)
+  with m_col1:
+    l_pj_c = st.number_input(
+        "Partidos Local en Casa", min_value=1, value=10, key="u_pj_lc"
+    )
+    l_gf_c = st.number_input(
+        "Goles Favor Local en Casa", min_value=0.0, value=22.0, key="u_gf_lc"
+    )
+  with m_col2:
+    v_pj_a = st.number_input(
+        "Partidos Visitante Afuera", min_value=1, value=10, key="u_pj_va"
+    )
+    v_gf_a = st.number_input(
+        "Goles Favor Visitante Afuera", min_value=0.0, value=16.0, key="u_gf_va"
+    )
+
+  st.markdown("---")
+  st.subheader("⚔️ 3. Historial H2H (Últimos 10 Duelos)")
+  h_col1, h_col2, h_col3 = st.columns(3)
+  with h_col1:
+    u_h2h_wl = st.number_input(
+        f"Victorias {lib_local}", min_value=0, max_value=10, value=4, key="uh_wl"
+    )
+  with h_col2:
+    u_h2h_e = st.number_input(
+        "Empates H2H", min_value=0, max_value=10, value=3, key="uh_e"
+    )
+  with h_col3:
+    u_h2h_wv = st.number_input(
+        f"Victorias {lib_visita}", min_value=0, max_value=10, value=3, key="uh_wv"
+    )
+
+  hg_col1, hg_col2 = st.columns(2)
+  with hg_col1:
+    u_h2h_gl = st.number_input(
+        f"Goles de {lib_local} en H2H", min_value=0.0, value=13.0, key="uh_gl"
+    )
+  with hg_col2:
+    u_h2h_gv = st.number_input(
+        f"Goles de {lib_visita} en H2H", min_value=0.0, value=11.0, key="uh_gv"
+    )
+
+  media_liga_univ = st.slider(
+      "🌐 Promedio de Goles de la Liga (Baseline)",
+      min_value=1.0,
+      max_value=2.0,
+      value=1.35,
+      step=0.05,
+      key="slider_liga_u",
+  )
+
+  st.markdown("---")
+  if st.button("🚀 Ejecutar Examen Global y Simulación Quirúrgica", type="primary"):
+    global_l = (g_gf_l / g_pj_l) * 0.4 + (l_gf_c / l_pj_c) * 0.4
+    global_v = (g_gf_v / g_pj_v) * 0.4 + (v_gf_a / v_pj_a) * 0.4
+
+    h2h_l = u_h2h_gl / 10.0
+    h2h_v = u_h2h_gv / 10.0
+
+    lambda_l_final = (global_l * 0.8) + (h2h_l * 0.2)
+    lambda_v_final = (global_v * 0.8) + (h2h_v * 0.2)
+
+    p_l, p_e, p_v, sim_gl_u, sim_gv_u = simular_monte_carlo(
+        lambda_l_final, lambda_v_final, 10000
+    )
+    btts_u = np.mean((sim_gl_u > 0) & (sim_gv_u > 0)) * 100
+    top_m_u = calcular_top_marcadores_exactos(lambda_l_final, lambda_v_final, 5)
+
+    st.subheader("🎯 Resultados del Examen Global Estocástico")
+    res1, res2, res3 = st.columns(3)
+    res1.metric(
+        f"Victoria {lib_local}",
+        f"{p_l:.1f}%",
+        f"Goles: {np.mean(sim_gl_u):.2f}",
+    )
+    res2.metric("Empate", f"{p_e:.1f}%")
+    res3.metric(
+        f"Victoria {lib_visita}",
+        f"{p_v:.1f}%",
+        f"Goles: {np.mean(sim_gv_u):.2f}",
+    )
+
+    st.markdown("---")
+    st.subheader("📊 Top 5 Marcadores Exactos Probables")
+    st.dataframe(pd.DataFrame(top_m_u), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.subheader("🛡️ Panel de Blindaje y Mercado de Goles (Universal)")
+
+    tabs_uni1, tabs_uni2, tabs_uni3 = st.tabs([
+        "⚽ Mercado BTTS (Ambos Anotan)",
+        "📊 Líneas de Goles (Over/Under)",
+        "🌟 Fortaleza Relativa Global",
+    ])
+
+    with tabs_uni1:
+      st.markdown("### Probabilidad de Ambos Equipos Anotan (BTTS)")
+      st.metric("Probabilidad de que ambos marquen", f"{btts_u:.1f}%")
+      if btts_u >= 62:
+        st.success(
+            "🔥 **Alta Confiabilidad:** Los datos globales y de local/afuera"
+            " indican una gran tendencia a que ambos firmen al menos un gol."
+        )
+      elif btts_u <= 40:
+        st.warning(
+            "⚠️ **Alerta:** Tendencia baja para ambos goles. Al menos un"
+            " arco podría mantenerse en cero."
+        )
+      else:
+        st.info(
+            "⚖️ **Escenario Neutro:** Probabilidad estándar para este mercado."
+        )
+
+    with tabs_uni2:
+      tot_g = sim_gl_u + sim_gv_u
+      st.write(
+          f"- **Más de 1.5 Goles (+1.5):**"
+          f" **{np.mean(tot_g > 1.5) * 100:.1f}%**"
+      )
+      st.write(
+          f"- **Más de 2.5 Goles (+2.5):**"
+          f" **{np.mean(tot_g > 2.5) * 100:.1f}%**"
+      )
+      st.write(
+          f"- **Menos de 3.5 Goles (-3.5):**"
+          f" **{np.mean(tot_g < 3.5) * 100:.1f}%**"
+      )
+
+    with tabs_uni3:
+      f_l_rel = lambda_l_final / media_liga_univ
+      f_v_rel = lambda_v_final / media_liga_univ
+      st.write(
+          f"- **Índice de Fuerza Global Local vs Media:** **{f_l_rel:.2f}x**"
+      )
+      st.write(
+          f"- **Índice de Fuerza Global Visitante vs Media:**"
+          f" **{f_v_rel:.2f}x**"
+      )
+      if f_l_rel > 1.25 and p_l > 55:
+        st.success(
+            "🌟 **Evaluación:** El equipo local destaca poderosamente sobre el"
+            " promedio de su categoría."
+        )
+      else:
+        st.info(
+            "ℹ️ **Evaluación:** Comportamiento estándar bajo los parámetros"
+            " introducidos."
+        )
 
