@@ -11,8 +11,8 @@ import streamlit as st
 # ==========================================
 st.set_page_config(
     page_title=(
-        "Zohan Pronostic v7.0 - Elite Unificado, H2H 5 Marcadores & Diagnóstico"
-        " Total"
+        "Zohan Pronostic v7.1 - Elite Unificado, Rachas Automáticas & Desglose"
+        " Global"
     ),
     page_icon="⚽",
     layout="wide",
@@ -324,6 +324,40 @@ def calcular_fibonacci_y_tendencia(stats_eq, historial, equipo):
   }
 
 
+def analizar_racha_automatica(historial, equipo):
+  """Analiza automáticamente el historial guardado para detectar rachas."""
+  partidos_equipo = []
+  for m in reversed(historial):
+    if m["local"] == equipo or m["visitante"] == equipo:
+      is_local = m["local"] == equipo
+      goles_favor = m["goles_local"] if is_local else m["goles_visita"]
+      goles_contra = m["goles_visita"] if is_local else m["goles_local"]
+      if goles_favor > goles_contra:
+        res = "G"
+      elif goles_favor < goles_contra:
+        res = "P"
+      else:
+        res = "E"
+      partidos_equipo.append(res)
+    if len(partidos_equipo) >= 5:
+      break
+
+  if not partidos_equipo:
+    return "Racha Normal / Estable (Sin historial registrado)", 1.0
+
+  ultimos_3 = partidos_equipo[:3]
+  # Si jugó al menos 3 partidos y ninguno fue victoria (P o E)
+  if len(ultimos_3) >= 3 and all(r in ["P", "E"] for r in ultimos_3):
+    return (
+        "Acumula 3+ partidos sin ganar (Busca Rebote / Urgencia)",
+        1.05,
+    )
+  elif all(r == "G" for r in ultimos_3) and len(ultimos_3) >= 2:
+    return "En plena racha ganadora", 1.0
+  else:
+    return "Racha Normal / Estable", 1.0
+
+
 def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
   goles_l = np.random.poisson(lambda_l, n_simulaciones)
   goles_v = np.random.poisson(lambda_v, n_simulaciones)
@@ -587,16 +621,16 @@ with tab4:
     m3.metric("Nivel Fibonacci", fibo_audit["fibo_estado"])
     st.info(f"💡 **Nota Táctica:** {fibo_audit['fibo_mensaje']}")
 
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (UNIFICADO CON H2H 10 + ÚLTIMOS 5 + RACHAS + TRAMPAS) ---
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (UNIFICADO CON H2H 10 + ÚLTIMOS 5 + DESGLOSE GLOBAL + RACHAS AUTOMÁTICAS) ---
 with tab5:
   st.header(
-      "🎯 Analizador Quirúrgico Elite - Fibonacci, H2H Global, Últimos 5 Duelos"
-      f" & Diagnóstico ({liga_sel})"
+      "🎯 Analizador Quirúrgico Elite - Fibonacci, Desglose Global, H2H & Rachas"
+      f" Automáticas ({liga_sel})"
   )
   st.info(
-      "Los datos de temporada se extraen automáticamente. Ingresa el historial"
-      " general de 10 duelos, y los marcadores exactos de los últimos 5"
-      " enfrentamientos."
+      "Los datos de temporada y el análisis global de ambos equipos se leen"
+      " automáticamente. Ingresa el historial general H2H y los últimos 5"
+      " marcadores exactos."
   )
 
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -614,24 +648,53 @@ with tab5:
   stats_l_base = datos_liga["tabla"][p_local]
   stats_v_base = datos_liga["tabla"][p_visita]
 
-  m_pj_l = max(1, stats_l_base["PJ_L"])
-  m_gf_l = stats_l_base["GF_L"]
-  m_gc_l = stats_l_base["GC_L"]
+  fibo_l = calcular_fibonacci_y_tendencia(
+      stats_l_base, datos_liga["historial"], p_local
+  )
+  fibo_v = calcular_fibonacci_y_tendencia(
+      stats_v_base, datos_liga["historial"], p_visita
+  )
 
-  m_pj_v = max(1, stats_v_base["PJ_V"])
-  m_gf_v = stats_v_base["GF_V"]
-  m_gc_v = stats_v_base["GC_V"]
+  racha_l_txt, mult_l = analizar_racha_automatica(
+      datos_liga["historial"], p_local
+  )
+  racha_v_txt, mult_v = analizar_racha_automatica(
+      datos_liga["historial"], p_visita
+  )
 
-  with st.expander(
-      "📊 Datos Extraídos Automáticamente de la Tabla", expanded=False
-  ):
-    ex_c1, ex_c2 = st.columns(2)
-    with ex_c1:
-      st.markdown(f"**🏠 Local ({p_local}) [Como Local]:**")
-      st.write(f"- PJ: `{m_pj_l}` | GF: `{m_gf_l}` | GC: `{m_gc_l}`")
-    with ex_c2:
-      st.markdown(f"**✈️ Visitante ({p_visita}) [Como Visitante]:**")
-      st.write(f"- PJ: `{m_pj_v}` | GF: `{m_gf_v}` | GC: `{m_gc_v}`")
+  st.markdown("---")
+  st.subheader("📊 Desglose Global y Análisis de Temporada de los Equipos")
+  dg_col1, dg_col2 = st.columns(2)
+
+  with dg_col1:
+    st.markdown(f"### 🏠 {p_local} (Global y Local)")
+    st.write(
+        f"- **Temporada Global:** PJ: `{stats_l_base['PJ']}` | Pts:"
+        f" `{stats_l_base['Pts']}` | GF: `{stats_l_base['GF']}` | GC:"
+        f" `{stats_l_base['GC']}` | DG: `{stats_l_base['DG']}`"
+    )
+    st.write(
+        f"- **En Casa:** PJ: `{stats_l_base['PJ_L']}` | GF:"
+        f" `{stats_l_base['GF_L']}` | GC: `{stats_l_base['GC_L']}`"
+    )
+    st.write(f"- **Eficiencia / Tendencia:** `{fibo_l['eficiencia']}%`")
+    st.write(f"- **Fibonacci:** {fibo_l['fibo_estado']}")
+    st.write(f"- **Inercia Automática:** *{racha_l_txt}*")
+
+  with dg_col2:
+    st.markdown(f"### ✈️ {p_visita} (Global y Visitante)")
+    st.write(
+        f"- **Temporada Global:** PJ: `{stats_v_base['PJ']}` | Pts:"
+        f" `{stats_v_base['Pts']}` | GF: `{stats_v_base['GF']}` | GC:"
+        f" `{stats_v_base['GC']}` | DG: `{stats_v_base['DG']}`"
+    )
+    st.write(
+        f"- **De Visitante:** PJ: `{stats_v_base['PJ_V']}` | GF:"
+        f" `{stats_v_base['GF_V']}` | GC: `{stats_v_base['GC_V']}`"
+    )
+    st.write(f"- **Eficiencia / Tendencia:** `{fibo_v['eficiencia']}%`")
+    st.write(f"- **Fibonacci:** {fibo_v['fibo_estado']}")
+    st.write(f"- **Inercia Automática:** *{racha_v_txt}*")
 
   st.markdown("---")
   with st.expander(
@@ -712,29 +775,6 @@ with tab5:
       h2h_5_goles_v_list.append(g_v_ind)
 
   st.markdown("---")
-  with st.expander(
-      "🧠 Diagnóstico de Inercia, Presión y Rachas Recientes", expanded=True
-  ):
-    racha_l_op = st.selectbox(
-        f"Inercia reciente de {p_local}",
-        [
-            "Racha Normal / Estable",
-            "Acumula 3+ partidos sin ganar (Busca Rebote)",
-            "En plena racha ganadora",
-        ],
-        key="racha_l_elite",
-    )
-    racha_v_op = st.selectbox(
-        f"Inercia reciente de {p_visita}",
-        [
-            "Racha Normal / Estable",
-            "Acumula 3+ partidos sin ganar (Presión / Urgencia de sumar)",
-            "En plena racha ganadora",
-        ],
-        key="racha_v_elite",
-    )
-
-  st.markdown("---")
   if p_local == p_visita:
     st.warning("⚠️ Selecciona dos equipos diferentes.")
   else:
@@ -742,14 +782,14 @@ with tab5:
         "🔥 Ejecutar Simulación Unificada & Diagnóstico Completo",
         type="primary",
     ):
-      fibo_l = calcular_fibonacci_y_tendencia(
-          stats_l_base, datos_liga["historial"], p_local
-      )
-      fibo_v = calcular_fibonacci_y_tendencia(
-          stats_v_base, datos_liga["historial"], p_visita
-      )
+      m_pj_l = max(1, stats_l_base["PJ_L"])
+      m_gf_l = stats_l_base["GF_L"]
+      m_gc_l = stats_l_base["GC_L"]
 
-      # Lambdas base de temporada
+      m_pj_v = max(1, stats_v_base["PJ_V"])
+      m_gf_v = stats_v_base["GF_V"]
+      m_gc_v = stats_v_base["GC_V"]
+
       gf_l_prom = m_gf_l / m_pj_l
       gc_l_prom = m_gc_l / m_pj_l
       gf_v_prom = m_gf_v / m_pj_v
@@ -758,31 +798,23 @@ with tab5:
       base_lambda_local = (gf_l_prom + gc_v_prom) / 2
       base_lambda_visita = (gf_v_prom + gc_l_prom) / 2
 
-      # Lambdas H2H 10 partidos
       h2h_10_l = h2h_goles_l / 10.0
       h2h_10_v = h2h_goles_v / 10.0
 
-      # Lambdas 5 partidos recientes
       h2h_5_l = sum(h2h_5_goles_l_list) / 5.0
       h2h_5_v = sum(h2h_5_goles_v_list) / 5.0
 
-      # Fusión unificada ponderada
+      # Fusión unificada ponderada aplicando multiplicador automático de racha
       lambda_local = (
           (0.50 * base_lambda_local)
           + (0.25 * h2h_10_l)
           + (0.25 * h2h_5_l)
-      )
+      ) * mult_l
       lambda_visita = (
           (0.50 * base_lambda_visita)
           + (0.25 * h2h_10_v)
           + (0.25 * h2h_5_v)
-      )
-
-      # Ajuste por inercia/racha negativa
-      if "sin ganar" in racha_l_op:
-        lambda_local *= 1.05
-      if "sin ganar" in racha_v_op:
-        lambda_visita *= 1.05
+      ) * mult_v
 
       mc_prob_l, mc_prob_e, mc_prob_v, sim_gl, sim_gv = simular_monte_carlo(
           lambda_local, lambda_visita, 10000
@@ -798,19 +830,19 @@ with tab5:
       st.subheader("📋 Informe de Diagnóstico y Desglose Táctico")
 
       msg_clima = f"### 🏟️ Análisis Integral: {p_local} vs {p_visita}\n\n"
-      msg_clima += f"#### 1️⃣ Estado de Rachas e Inercia Psicológica\n"
+      msg_clima += f"#### 1️⃣ Estado de Rachas & Inercia (Automático)\n"
       msg_clima += (
-          f"- **{p_local}:** {racha_l_op} | Tendencia: *{fibo_l['tendencia']}*\n"
+          f"- **{p_local}:** {racha_l_txt} | Tendencia: *{fibo_l['tendencia']}*\n"
       )
       msg_clima += (
-          f"- **{p_visita}:** {racha_v_op} | Tendencia:"
+          f"- **{p_visita}:** {racha_v_txt} | Tendencia:"
           f" *{fibo_v['tendencia']}*\n"
       )
-      if "sin ganar" in racha_l_op or "sin ganar" in racha_v_op:
+      if mult_l > 1.0 or mult_v > 1.0:
         msg_clima += (
             "> ⚠️ **Nota de Alerta por Presión:** Se detecta urgencia competitiva"
-            " por mala racha acumulada. Esto incrementa la probabilidad de"
-            " rebote táctico y empates sufridos.\n\n"
+            " por mala racha acumulada. Esto incrementa la presión ofensiva y"
+            " el factor de rebote táctico.\n\n"
         )
       else:
         msg_clima += "\n"
