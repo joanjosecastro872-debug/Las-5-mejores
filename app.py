@@ -11,7 +11,7 @@ import streamlit as st
 # ==========================================
 st.set_page_config(
     page_title=(
-        "Zohan Pronostic v7.3 - Elite Unificado, Reporte Global Inicial & Comas"
+        "Zohan Pronostic v7.5 - Elite con Casillas de Enfrentamientos Directos"
     ),
     page_icon="⚽",
     layout="wide",
@@ -618,16 +618,16 @@ with tab4:
     m3.metric("Nivel Fibonacci", fibo_audit["fibo_estado"])
     st.info(f"💡 **Nota Táctica:** {fibo_audit['fibo_mensaje']}")
 
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (UNIFICADO CON ENTRADA POR COMAS) ---
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (UNIFICADO CON CASILLAS) ---
 with tab5:
   st.header(
-      "🎯 Analizador Quirúrgico Elite - Fibonacci, Desglose Global, H2H & Rachas"
-      f" Automáticas ({liga_sel})"
+      "🎯 Analizador Quirúrgico Elite - Alerta de Francotirador, Fibonacci,"
+      f" Desglose Global & H2H ({liga_sel})"
   )
   st.info(
       "Los datos de temporada y el análisis global de ambos equipos se leen"
-      " automáticamente. Ingresa el historial general H2H y los últimos"
-      " marcadores en formato de texto."
+      " automáticamente. Introduce los datos del H2H y los goles usando las"
+      " casillas independientes."
   )
 
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -741,39 +741,52 @@ with tab5:
 
   st.markdown("---")
   with st.expander(
-      "🔥 Bloque 2: Últimos Enfrentamientos Directos (Entrada por Comas)",
+      "🔥 Bloque 2: Casillas de Últimos Enfrentamientos Directos (Sin guiones)",
       expanded=True,
   ):
     st.write(
-        "Escribe los marcadores separados por comas en formato"
-        " **Local-Visita** (Ejemplo: `2-1, 1-0, 0-0, 2-2, 3-1`):"
-    )
-    match_input_str = st.text_input(
-        "Marcadores recientes",
-        value="1-1, 2-1, 0-0, 1-0, 2-2",
-        help="Introduce los resultados divididos por guion y separados por coma.",
+        "Introduce los goles partido por partido usando las casillas"
+        " independientes para cada equipo:"
     )
 
     h2h_5_goles_l_list = []
     h2h_5_goles_v_list = []
 
-    try:
-      for item in match_input_str.split(","):
-        item = item.strip()
-        if "-" in item:
-          g_l, g_v = item.split("-")
-          h2h_5_goles_l_list.append(float(g_l.strip()))
-          h2h_5_goles_v_list.append(float(g_v.strip()))
-    except Exception:
-      pass
+    defaults_l = [1, 2, 0, 1, 2]
+    defaults_v = [1, 1, 0, 0, 2]
 
-    if not h2h_5_goles_l_list:
-      h2h_5_goles_l_list = [1.0, 1.0, 1.0, 1.0, 1.0]
-      h2h_5_goles_v_list = [1.0, 1.0, 1.0, 1.0, 1.0]
+    for i in range(5):
+      col_fila_1, col_fila_2, col_fila_3 = st.columns([2, 2, 3])
+      with col_fila_1:
+        gl_partido = st.number_input(
+            f"Partido {i+1} ({p_local})",
+            min_value=0,
+            max_value=15,
+            value=defaults_l[i],
+            key=f"h2h_g_l_{i}",
+        )
+      with col_fila_2:
+        gv_partido = st.number_input(
+            f"Partido {i+1} ({p_visita})",
+            min_value=0,
+            max_value=15,
+            value=defaults_v[i],
+            key=f"h2h_g_v_{i}",
+        )
+      with col_fila_3:
+        st.markdown(
+            f"<div"
+            " style='padding-top:28px; font-weight:bold; color:#FF4B4B;'>Marcador"
+            f" #{i+1}: {int(gl_partido)} - {int(gv_partido)}</div>",
+            unsafe_allow_html=True,
+        )
+
+      h2h_5_goles_l_list.append(float(gl_partido))
+      h2h_5_goles_v_list.append(float(gv_partido))
 
     st.write(
-        f"✅ *Se han detectado {len(h2h_5_goles_l_list)} partidos en la"
-        " secuencia.*"
+        f"✅ *Se han cargado correctamente {len(h2h_5_goles_l_list)} partidos"
+        " desde las casillas.*"
     )
 
   st.markdown("---")
@@ -828,11 +841,45 @@ with tab5:
           lambda_local, lambda_visita, 5
       )
 
+      # LÓGICA DE LA ALERTA DE FRANCOTIRADOR
+      alerta_francotirador_activa = False
+      sniper_tipo = ""
+      if mc_prob_l >= 65.0:
+        alerta_francotirador_activa = True
+        sniper_tipo = (
+            f"🎯 **ALERTA DE FRANCOTIRADOR ACTIVA:** Dominio absoluto de"
+            f" **{p_local}** con probabilidad superior al 65.0% ({mc_prob_l:.1f}%)."
+            " Objetivo claro para victoria directa o hándicap favorable."
+        )
+      elif mc_prob_v >= 55.0:
+        alerta_francotirador_activa = True
+        sniper_tipo = (
+            f"🎯 **ALERTA DE FRANCOTIRADOR ACTIVA:** Alta cuota de valor para"
+            f" **{p_visita}** como visitante ({mc_prob_v:.1f}%). Oportunidad de"
+            " golpe estratégico fuera de casa."
+        )
+      elif mc_prob_e >= 32.0:
+        alerta_francotirador_activa = True
+        sniper_tipo = (
+            "🎯 **ALERTA DE FRANCOTIRADOR ACTIVA (PARTIDO TRAMPA):** Alta"
+            f" concentración de empates ({mc_prob_e:.1f}%). Mercado ideal para"
+            " doble oportunidad o buscar la igualada táctica."
+        )
+      elif btts_prob >= 68.0:
+        alerta_francotirador_activa = True
+        sniper_tipo = (
+            "🎯 **ALERTA DE FRANCOTIRADOR ACTIVA (GOL A GOL):** Probabilidad"
+            f" crítica de ambos anotan (**{btts_prob:.1f}%**). Alta fiabilidad"
+            " para el mercado de BTTS."
+        )
+
       st.markdown("---")
       st.subheader("📋 Informe de Diagnóstico y Desglose Táctico")
 
-      # REPORTE DE TEXTO INICIANDO DIRECTAMENTE CON EL ANÁLISIS GLOBAL DE TEMPORADA
       msg_clima = f"### 🏟️ Análisis Integral: {p_local} vs {p_visita}\n\n"
+
+      if alerta_francotirador_activa:
+        msg_clima += f"{sniper_tipo}\n\n"
 
       msg_clima += (
           "#### 1️⃣ Radiografía y Comportamiento Global de la Temporada\n"
@@ -889,6 +936,9 @@ with tab5:
       msg_clima += f"- Probabilidad de BTTS: **{btts_prob:.1f}%**\n\n"
 
       st.success(msg_clima)
+
+      if alerta_francotirador_activa:
+        st.warning(sniper_tipo)
 
       col_m1, col_m2, col_m3 = st.columns(3)
       col_m1.metric(
