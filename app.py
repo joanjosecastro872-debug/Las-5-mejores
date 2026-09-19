@@ -11,7 +11,7 @@ import streamlit as st
 # ==========================================
 st.set_page_config(
     page_title=(
-        "Zohan Pronostic v7.6 - Elite con Alertas Múltiples de Francotirador"
+        "Zohan Pronostic v7.7 - Elite con Alertas Múltiples & Elo Snapshot"
     ),
     page_icon="⚽",
     layout="wide",
@@ -176,7 +176,7 @@ LIGAS_EQUIPOS = {
 }
 
 # ==========================================
-# 2. GESTIÓN DE BASE DE DATOS Y LÓGICA
+# 2. GESTIÓN DE BASE DE DATOS Y ELO
 # ==========================================
 
 
@@ -250,6 +250,17 @@ def guardar_base_datos(data):
     json.dump(data, f, ensure_ascii=False, indent=4)
 
 
+def calcular_elo_snapshot(stats_eq):
+  """Calcula el puntaje Elo instantáneo basado en la tabla actual."""
+  pj = max(1, stats_eq.get("PJ", 1))
+  pts = stats_eq.get("Pts", 0)
+  dg = stats_eq.get("DG", 0)
+  promedio_pts = pts / pj
+  # Base 1500 + rendimiento de puntos + diferencia de goles
+  elo = 1500 + (promedio_pts * 110) + (dg * 10)
+  return round(elo)
+
+
 def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
   factor = -1 if revertir else 1
 
@@ -287,7 +298,7 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
   eq_v["Pts"] += factor * pts_v
 
 
-def calcular_fibonacci_y_tendencia(stats_eq, historial, equipo):
+def calcular_fibonacci_y_tendencia(stats_eq, equipo):
   pj = max(1, stats_eq["PJ"])
   pts = stats_eq["Pts"]
   eficiencia = round((pts / (pj * 3)) * 100, 1) if pj > 0 else 0.0
@@ -428,7 +439,7 @@ if archivo_subido is not None:
     st.sidebar.error("Archivo .txt inválido.")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📊 Tabla de Posiciones",
+    "📊 Tabla de Posiciones & Elo",
     "⚙️ Carga Directa Avanzada",
     "📝 Registrar Partido",
     "🔬 Auditoría Global y Cruzada",
@@ -436,9 +447,9 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🌍 Analizador Universal",
 ])
 
-# --- TAB 1: TABLA DE POSICIONES ---
+# --- TAB 1: TABLA DE POSICIONES & ELO ---
 with tab1:
-  st.header(f"Tabla de Posiciones - {liga_sel}")
+  st.header(f"Tabla de Posiciones y Jerarquía Elo - {liga_sel}")
   if "vista_tabla" not in st.session_state:
     st.session_state.vista_tabla = "General"
 
@@ -498,7 +509,15 @@ with tab1:
   )
   df_v = df_tabla[cols].copy()
   df_v.columns = ["PJ", "PG", "PE", "PP", "GF", "GC", "DG", "Pts"]
-  df_v = df_v.sort_values(by=["Pts", "DG", "GF"], ascending=False)
+
+  # Añadir columna de Elo Snapshot dinámico
+  elos_lista = []
+  for eq_name, row_data in df_v.iterrows():
+    raw_stats = datos_liga["tabla"][eq_name]
+    elos_lista.append(calcular_elo_snapshot(raw_stats))
+  df_v["Elo"] = elos_lista
+
+  df_v = df_v.sort_values(by=["Pts", "DG", "GF", "Elo"], ascending=False)
   st.dataframe(df_v, use_container_width=True)
 
 # --- TAB 2: CARGA DIRECTA AVANZADA ---
@@ -606,23 +625,23 @@ with tab4:
 
   if eq_audit:
     stats_audit = datos_liga["tabla"][eq_audit]
-    fibo_audit = calcular_fibonacci_y_tendencia(
-        stats_audit, datos_liga["historial"], eq_audit
-    )
+    fibo_audit = calcular_fibonacci_y_tendencia(stats_audit, eq_audit)
+    elo_audit = calcular_elo_snapshot(stats_audit)
 
     st.markdown("---")
-    st.subheader(f"📋 Radiografía Global & Fibonacci: {eq_audit}")
-    m1, m2, m3 = st.columns(3)
+    st.subheader(f"📋 Radiografía Global, Elo & Fibonacci: {eq_audit}")
+    m1, m2, m3, m4 = st.columns(4)
     m1.metric("Eficiencia Total", f"{fibo_audit['eficiencia']}%")
-    m2.metric("Tendencia Actual", fibo_audit["tendencia"])
-    m3.metric("Nivel Fibonacci", fibo_audit["fibo_estado"])
+    m2.metric("Puntaje Elo (Snapshot)", f"{elo_audit} pts")
+    m3.metric("Tendencia Actual", fibo_audit["tendencia"])
+    m4.metric("Nivel Fibonacci", fibo_audit["fibo_estado"])
     st.info(f"💡 **Nota Táctica:** {fibo_audit['fibo_mensaje']}")
 
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (CON ALERTAS MÚLTIPLES) ---
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (CON ELO INTELIGENTE) ---
 with tab5:
   st.header(
-      "🎯 Analizador Quirúrgico Elite - Alertas Múltiples de Francotirador,"
-      f" Fibonacci, Desglose Global & H2H ({liga_sel})"
+      "🎯 Analizador Quirúrgico Elite - Alertas de Francotirador, Elo"
+      f" Snapshot & H2H ({liga_sel})"
   )
   st.info(
       "Los datos de temporada y el análisis global se leen automáticamente."
@@ -644,12 +663,11 @@ with tab5:
   stats_l_base = datos_liga["tabla"][p_local]
   stats_v_base = datos_liga["tabla"][p_visita]
 
-  fibo_l = calcular_fibonacci_y_tendencia(
-      stats_l_base, datos_liga["historial"], p_local
-  )
-  fibo_v = calcular_fibonacci_y_tendencia(
-      stats_v_base, datos_liga["historial"], p_visita
-  )
+  fibo_l = calcular_fibonacci_y_tendencia(stats_l_base, p_local)
+  fibo_v = calcular_fibonacci_y_tendencia(stats_v_base, p_visita)
+
+  elo_l = calcular_elo_snapshot(stats_l_base)
+  elo_v = calcular_elo_snapshot(stats_v_base)
 
   racha_l_txt, mult_l = analizar_racha_automatica(
       datos_liga["historial"], p_local
@@ -673,7 +691,10 @@ with tab5:
         f"- **En Casa:** PJ: `{stats_l_base['PJ_L']}` | GF:"
         f" `{stats_l_base['GF_L']}` | GC: `{stats_l_base['GC_L']}`"
     )
-    st.write(f"- **Eficiencia / Tendencia:** `{fibo_l['eficiencia']}%`")
+    st.write(
+        f"- **Puntaje Elo (Snapshot):** **{elo_l} pts** | Eficiencia:"
+        f" `{fibo_l['eficiencia']}%`"
+    )
     st.write(f"- **Fibonacci:** {fibo_l['fibo_estado']}")
     st.write(f"- **Inercia Automática:** *{racha_l_txt}*")
 
@@ -688,7 +709,10 @@ with tab5:
         f"- **De Visitante:** PJ: `{stats_v_base['PJ_V']}` | GF:"
         f" `{stats_v_base['GF_V']}` | GC: `{stats_v_base['GC_V']}`"
     )
-    st.write(f"- **Eficiencia / Tendencia:** `{fibo_v['eficiencia']}%`")
+    st.write(
+        f"- **Puntaje Elo (Snapshot):** **{elo_v} pts** | Eficiencia:"
+        f" `{fibo_v['eficiencia']}%`"
+    )
     st.write(f"- **Fibonacci:** {fibo_v['fibo_estado']}")
     st.write(f"- **Inercia Automática:** *{racha_v_txt}*")
 
@@ -793,7 +817,7 @@ with tab5:
     st.warning("⚠️ Selecciona dos equipos diferentes.")
   else:
     if st.button(
-        "🔥 Ejecutar Simulación Unificada & Diagnóstico Completo",
+        "🔥 Ejecutar Simulación Unificada & Diagnóstico con Elo",
         type="primary",
     ):
       m_pj_l = max(1, stats_l_base["PJ_L"])
@@ -819,16 +843,21 @@ with tab5:
       h2h_5_l = sum(h2h_5_goles_l_list) / n_partidos_h2h5
       h2h_5_v = sum(h2h_5_goles_v_list) / n_partidos_h2h5
 
+      # Ajuste del factor Elo en los lambdas (ventaja de jerarquía)
+      dif_elo = elo_l - elo_v
+      factor_elo_local = 1.0 + (dif_elo / 1500.0)
+      factor_elo_visita = 1.0 - (dif_elo / 1500.0)
+
       lambda_local = (
-          (0.50 * base_lambda_local)
-          + (0.25 * h2h_10_l)
-          + (0.25 * h2h_5_l)
-      ) * mult_l
+          ((0.45 * base_lambda_local) + (0.25 * h2h_10_l) + (0.30 * h2h_5_l))
+          * mult_l
+          * max(0.8, factor_elo_local)
+      )
       lambda_visita = (
-          (0.50 * base_lambda_visita)
-          + (0.25 * h2h_10_v)
-          + (0.25 * h2h_5_v)
-      ) * mult_v
+          ((0.45 * base_lambda_visita) + (0.25 * h2h_10_v) + (0.30 * h2h_5_v))
+          * mult_v
+          * max(0.8, factor_elo_visita)
+      )
 
       mc_prob_l, mc_prob_e, mc_prob_v, sim_gl, sim_gv = simular_monte_carlo(
           lambda_local, lambda_visita, 10000
@@ -847,29 +876,29 @@ with tab5:
       if mc_prob_l >= 65.0:
         alertas_francotirador.append(
             f"🎯 **ALERTA FRANCOTIRADOR [VICTORIA LOCAL]:** Dominio absoluto de"
-            f" **{p_local}** con probabilidad de **{mc_prob_l:.1f}%**. Objetivo"
-            " ideal para victoria directa o hándicap favorable."
+            f" **{p_local}** (Elo: `{elo_l}`) con probabilidad de"
+            f" **{mc_prob_l:.1f}%**. Objetivo óptimo para victoria directa."
         )
 
       if mc_prob_v >= 55.0:
         alertas_francotirador.append(
             f"🎯 **ALERTA FRANCOTIRADOR [VICTORIA VISITANTE]:** Cuota de valor"
-            f" alta para **{p_visita}** como visitante con **{mc_prob_v:.1f}%**."
-            " Oportunidad estratégica fuera de casa."
+            f" alta para **{p_visita}** (Elo: `{elo_v}`) con"
+            f" **{mc_prob_v:.1f}%**. Oportunidad táctica fuera de casa."
         )
 
       if mc_prob_e >= 32.0:
         alertas_francotirador.append(
             f"🎯 **ALERTA FRANCOTIRADOR [PARTIDO TRAMPA]:** Alta concentración"
             f" de empates con **{mc_prob_e:.1f}%**. Mercado ideal para doble"
-            " oportunidad o asegurar la igualada táctica."
+            " oportunidad."
         )
 
       if btts_prob >= 68.0:
         alertas_francotirador.append(
             f"🎯 **ALERTA FRANCOTIRADOR [AMBOS ANOTAN / BTTS]:** Tendencia"
             f" crítica de goles en ambos arcos con **{btts_prob:.1f}%**. Alta"
-            " fiabilidad para el mercado de BTTS."
+            " fiabilidad para BTTS."
         )
 
       if over_2_5_prob >= 65.0:
@@ -882,7 +911,6 @@ with tab5:
       st.markdown("---")
       st.subheader("📋 Informe de Diagnóstico y Desglose Táctico")
 
-      # Mostrar TODAS las alertas fijas activas en la parte superior del informe
       if alertas_francotirador:
         for alerta in alertas_francotirador:
           st.warning(alerta)
@@ -896,21 +924,17 @@ with tab5:
       msg_clima = f"### 🏟️ Análisis Integral: {p_local} vs {p_visita}\n\n"
 
       msg_clima += (
-          "#### 1️⃣ Radiografía y Comportamiento Global de la Temporada\n"
+          "#### 1️⃣ Radiografía, Jerarquía Elo & Comportamiento Global\n"
       )
       msg_clima += (
-          f"- **{p_local}:** Eficiencia global del **{fibo_l['eficiencia']}%**"
-          f" (Acumula `{stats_l_base['Pts']}` puntos en"
-          f" `{stats_l_base['PJ']}` partidos). Goles Favor:"
-          f" `{stats_l_base['GF']}` | Goles Contra: `{stats_l_base['GC']}` |"
-          f" Tendencia: *{fibo_l['tendencia']}*.\n"
+          f"- **{p_local}:** Elo: `{elo_l}` | Eficiencia global:"
+          f" **{fibo_l['eficiencia']}%** (Pts: `{stats_l_base['Pts']}` en"
+          f" `{stats_l_base['PJ']}` PJ) | Tendencia: *{fibo_l['tendencia']}*.\n"
       )
       msg_clima += (
-          f"- **{p_visita}:** Eficiencia global del **{fibo_v['eficiencia']}%**"
-          f" (Acumula `{stats_v_base['Pts']}` puntos en"
-          f" `{stats_v_base['PJ']}` partidos). Goles Favor:"
-          f" `{stats_v_base['GF']}` | Goles Contra: `{stats_v_base['GC']}` |"
-          f" Tendencia: *{fibo_v['tendencia']}*.\n\n"
+          f"- **{p_visita}:** Elo: `{elo_v}` | Eficiencia global:"
+          f" **{fibo_v['eficiencia']}%** (Pts: `{stats_v_base['Pts']}` en"
+          f" `{stats_v_base['PJ']}` PJ) | Tendencia: *{fibo_v['tendencia']}*.\n\n"
       )
 
       msg_clima += "#### 2️⃣ Estado de Rachas & Inercia (Automático)\n"
@@ -925,13 +949,14 @@ with tab5:
       if mult_l > 1.0 or mult_v > 1.0:
         msg_clima += (
             "> ⚠️ **Nota de Alerta por Presión:** Se detecta urgencia competitiva"
-            " por mala racha acumulada. Esto incrementa la presión ofensiva y"
-            " el factor de rebote táctico.\n\n"
+            " por mala racha acumulada.\n\n"
         )
       else:
         msg_clima += "\n"
 
-      msg_clima += f"#### 3️⃣ Motor Matemático Unificado (Monte Carlo & Poisson)\n"
+      msg_clima += (
+          f"#### 3️⃣ Motor Matemático Unificado (Monte Carlo, Poisson & Elo)\n"
+      )
       msg_clima += (
           f"- Expectativa de Goles (Lambda): Local: `{prom_sim_gl:.2f}` |"
           f" Visitante: `{prom_sim_gv:.2f}`\n"
