@@ -11,8 +11,8 @@ import streamlit as st
 # ==========================================
 st.set_page_config(
     page_title=(
-        "Zohan Pronostic v7.0 - Elite Fibonacci, H2H Global, Diagnóstico de"
-        " Rachas & Lupa 5 H2H"
+        "Zohan Pronostic v7.0 - Elite Unificado, H2H 5 Marcadores & Diagnóstico"
+        " Total"
     ),
     page_icon="⚽",
     layout="wide",
@@ -396,14 +396,13 @@ if archivo_subido is not None:
   except Exception:
     st.sidebar.error("Archivo .txt inválido.")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📊 Tabla de Posiciones",
     "⚙️ Carga Directa Avanzada",
     "📝 Registrar Partido",
     "🔬 Auditoría Global y Cruzada",
     "🎯 Analizador Quirúrgico Elite",
     "🌍 Analizador Universal",
-    "⚔️ Últimos 5 Duelos H2H",
 ])
 
 # --- TAB 1: TABLA DE POSICIONES ---
@@ -588,15 +587,16 @@ with tab4:
     m3.metric("Nivel Fibonacci", fibo_audit["fibo_estado"])
     st.info(f"💡 **Nota Táctica:** {fibo_audit['fibo_mensaje']}")
 
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE ---
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (UNIFICADO CON H2H 10 + ÚLTIMOS 5 + RACHAS + TRAMPAS) ---
 with tab5:
   st.header(
-      "🎯 Analizador Quirúrgico Elite - Fibonacci, H2H Directo & Diagnóstico"
-      f" ({liga_sel})"
+      "🎯 Analizador Quirúrgico Elite - Fibonacci, H2H Global, Últimos 5 Duelos"
+      f" & Diagnóstico ({liga_sel})"
   )
   st.info(
-      "Los datos de temporada se extraen automáticamente de la tabla. Ingresa"
-      " directamente los datos de los últimos 10 enfrentamientos directos."
+      "Los datos de temporada se extraen automáticamente. Ingresa el historial"
+      " general de 10 duelos, y los marcadores exactos de los últimos 5"
+      " enfrentamientos."
   )
 
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -635,8 +635,7 @@ with tab5:
 
   st.markdown("---")
   with st.expander(
-      "⚔️ Bloque Cara a Cara: Ingreso Directo de Últimos 10 Partidos H2H",
-      expanded=True,
+      "⚔️ Bloque 1: Historial General H2H (Últimos 10 Partidos)", expanded=True
   ):
     col_b1, col_b2, col_b3 = st.columns(3)
     with col_b1:
@@ -679,16 +678,43 @@ with tab5:
           step=0.5,
           key="h2h_dir_gv",
       )
-    h2h_pj = 10
 
   st.markdown("---")
   with st.expander(
-      "🧠 Diagnóstico de Inercia y Presión Reciente (Opcional)", expanded=True
+      "🔥 Bloque 2: Últimos 5 Enfrentamientos Directos (Marcadores Exactos)",
+      expanded=True,
   ):
     st.write(
-        "Indica si alguno de los equipos arrastra una racha o presión especial"
-        " (ej. varios partidos sin ganar):"
+        "Introduce los marcadores de los últimos 5 duelos recientes entre"
+        " ambos:"
     )
+    h2h_5_goles_l_list = []
+    h2h_5_goles_v_list = []
+    for idx_m in range(1, 6):
+      mc_col1, mc_col2 = st.columns(2)
+      with mc_col1:
+        g_l_ind = st.number_input(
+            f"Partido {idx_m} - Goles {p_local}",
+            min_value=0,
+            max_value=10,
+            value=1,
+            key=f"h2h_5_l_{idx_m}",
+        )
+      with mc_col2:
+        g_v_ind = st.number_input(
+            f"Partido {idx_m} - Goles {p_visita}",
+            min_value=0,
+            max_value=10,
+            value=1,
+            key=f"h2h_5_v_{idx_m}",
+        )
+      h2h_5_goles_l_list.append(g_l_ind)
+      h2h_5_goles_v_list.append(g_v_ind)
+
+  st.markdown("---")
+  with st.expander(
+      "🧠 Diagnóstico de Inercia, Presión y Rachas Recientes", expanded=True
+  ):
     racha_l_op = st.selectbox(
         f"Inercia reciente de {p_local}",
         [
@@ -713,7 +739,7 @@ with tab5:
     st.warning("⚠️ Selecciona dos equipos diferentes.")
   else:
     if st.button(
-        "🔥 Ejecutar Simulación Estocástica & Diagnóstico Táctico",
+        "🔥 Ejecutar Simulación Unificada & Diagnóstico Completo",
         type="primary",
     ):
       fibo_l = calcular_fibonacci_y_tendencia(
@@ -723,6 +749,7 @@ with tab5:
           stats_v_base, datos_liga["historial"], p_visita
       )
 
+      # Lambdas base de temporada
       gf_l_prom = m_gf_l / m_pj_l
       gc_l_prom = m_gc_l / m_pj_l
       gf_v_prom = m_gf_v / m_pj_v
@@ -731,12 +758,27 @@ with tab5:
       base_lambda_local = (gf_l_prom + gc_v_prom) / 2
       base_lambda_visita = (gf_v_prom + gc_l_prom) / 2
 
-      h2h_lambda_l = h2h_goles_l / h2h_pj
-      h2h_lambda_v = h2h_goles_v / h2h_pj
+      # Lambdas H2H 10 partidos
+      h2h_10_l = h2h_goles_l / 10.0
+      h2h_10_v = h2h_goles_v / 10.0
 
-      lambda_local = (0.7 * base_lambda_local) + (0.3 * h2h_lambda_l)
-      lambda_visita = (0.7 * base_lambda_visita) + (0.3 * h2h_lambda_v)
+      # Lambdas 5 partidos recientes
+      h2h_5_l = sum(h2h_5_goles_l_list) / 5.0
+      h2h_5_v = sum(h2h_5_goles_v_list) / 5.0
 
+      # Fusión unificada ponderada
+      lambda_local = (
+          (0.50 * base_lambda_local)
+          + (0.25 * h2h_10_l)
+          + (0.25 * h2h_5_l)
+      )
+      lambda_visita = (
+          (0.50 * base_lambda_visita)
+          + (0.25 * h2h_10_v)
+          + (0.25 * h2h_5_v)
+      )
+
+      # Ajuste por inercia/racha negativa
       if "sin ganar" in racha_l_op:
         lambda_local *= 1.05
       if "sin ganar" in racha_v_op:
@@ -768,13 +810,20 @@ with tab5:
         msg_clima += (
             "> ⚠️ **Nota de Alerta por Presión:** Se detecta urgencia competitiva"
             " por mala racha acumulada. Esto incrementa la probabilidad de"
-            " rebote táctico, empates sufridos o respuestas forzadas en la"
-            " cancha.\n\n"
+            " rebote táctico y empates sufridos.\n\n"
         )
       else:
         msg_clima += "\n"
 
-      msg_clima += f"#### 2️⃣ Motor Matemático (Monte Carlo & Poisson)\n"
+      # Detector de Partido Trampa
+      if mc_prob_e >= 30.0:
+        msg_clima += (
+            "> 🚨 **ALERTA DE PARTIDO TRAMPA:** El porcentaje de empate supera"
+            f" el umbral crítico ({mc_prob_e:.1f}%). Los equipos se neutralizan"
+            " estadísticamente; alto riesgo de repartir puntos.\n\n"
+        )
+
+      msg_clima += f"#### 2️⃣ Motor Matemático Unificado (Monte Carlo & Poisson)\n"
       msg_clima += (
           f"- Expectativa de Goles (Lambda): Local: `{prom_sim_gl:.2f}` |"
           f" Visitante: `{prom_sim_gv:.2f}`\n"
@@ -802,6 +851,7 @@ with tab5:
           pd.DataFrame(top_marcadores), use_container_width=True, hide_index=True
       )
 
+      # Panel de Blindaje Completo
       st.markdown("---")
       st.subheader("🛡️ Panel de Blindaje Automático para Parlays")
       t_sub1, t_sub2, t_sub3 = st.tabs([
@@ -972,11 +1022,10 @@ with tab6:
 
     st.subheader(f"🎯 Resultados Universales: {u_local} vs {u_visita}")
 
-    if "sin ganar" in u_racha_l or "sin ganar" in u_racha_v:
+    if p_e >= 30.0:
       st.warning(
-          "⚠️ **Aviso de Diagnóstico:** Hay un equipo bajo presión por racha"
-          " negativa. Las probabilidades de reacción o empate se ven alteradas"
-          " por la urgencia psicológica."
+          "🚨 **ALERTA DE PARTIDO TRAMPA:** Probabilidad de empate superior al"
+          f" 30% ({p_e:.1f}%). Mucho cuidado."
       )
 
     ur1, ur2, ur3 = st.columns(3)
@@ -1012,115 +1061,4 @@ with tab6:
       st.write(f"- Menos de 3.5 Goles: **{np.mean(tot_g_u < 3.5) * 100:.1f}%**")
     with ut3:
       st.metric("Probabilidad BTTS", f"{btts_u:.1f}%")
-
-# --- TAB 7: ÚLTIMOS 5 DUELOS H2H (LUPA RECIENTE) ---
-with tab7:
-  st.header("⚔️ Lupa Quirúrgica: Últimos 5 Duelos Directos (H2H Reciente)")
-  st.info(
-      "Introduce los nombres de los equipos y anota los resultados exactos de"
-      " sus últimos 5 enfrentamientos directos globales (sin importar la"
-      " cancha). La aplicación procesará esta inercia reciente de manera"
-      " exclusiva."
-  )
-
-  c7_1, c7_2 = st.columns(2)
-  with c7_1:
-    h5_local = st.text_input(
-        "Equipo Local", value="Equipo Local", key="h5_loc_name"
-    )
-  with c7_2:
-    h5_visita = st.text_input(
-        "Equipo Visitante", value="Equipo Visitante", key="h5_vis_name"
-    )
-
-  st.markdown("---")
-  st.subheader("📋 Ingresa los Marcadores de los Últimos 5 Enfrentamientos")
-
-  # 5 partidos input
-  match_scores = []
-  for i in range(1, 6):
-    st.markdown(f"**Partido #{i} (Más reciente {'=' if i == 1 else ''})**")
-    col_m1, col_m2 = st.columns(2)
-    with col_m1:
-      g_l = st.number_input(
-          f"Goles {h5_local}",
-          min_value=0,
-          max_value=15,
-          value=1 if i % 2 != 0 else 0,
-          key=f"h5_g_l_{i}",
-      )
-    with col_m2:
-      g_v = st.number_input(
-          f"Goles {h5_visita}",
-          min_value=0,
-          max_value=15,
-          value=1 if i % 2 == 0 else 2,
-          key=f"h5_g_v_{i}",
-      )
-    match_scores.append((g_l, g_v))
-    st.write("")
-
-  st.markdown("---")
-  if st.button("🚀 Ejecutar Análisis Exclusivo de Últimos 5 H2H", type="primary"):
-    # Calcular promedios exclusivos de estos 5 partidos
-    total_gl_5 = sum([m[0] for m in match_scores])
-    total_gv_5 = sum([m[1] for m in match_scores])
-
-    lambda_l_5 = total_gl_5 / 5.0
-    lambda_v_5 = total_gv_5 / 5.0
-
-    p_l5, p_e5, p_v5, sim_gl_5, sim_gv_5 = simular_monte_carlo(
-        lambda_l_5, lambda_v_5, 10000
-    )
-    btts_5 = np.mean((sim_gl_5 > 0) & (sim_gv_5 > 0)) * 100
-    top_m_5 = calcular_top_marcadores_exactos(lambda_l_5, lambda_v_5, 5)
-
-    st.subheader(
-        f"🎯 Resultados basados en la Inercia de los Últimos 5 Duelos: {h5_local}"
-        f" vs {h5_visita}"
-    )
-
-    # Diagnóstico narrativo rápido
-    st.info(
-        f"💡 **Radiografía de los 5 Duelos:** Entre ambos se han anotado un"
-        f" promedio de `{lambda_l_5:.2f}` goles para {h5_local} y"
-        f" `{lambda_v_5:.2f}` goles para {h5_visita} por partido en sus"
-        " enfrentamientos directos recientes."
-    )
-
-    m7_1, m7_2, m7_3 = st.columns(3)
-    m7_1.metric(
-        f"Victoria {h5_local}",
-        f"{p_l5:.1f}%",
-        f"Lambda: {lambda_l_5:.2f}",
-    )
-    m7_2.metric("Empate H2H", f"{p_e5:.1f}%")
-    m7_3.metric(
-        f"Victoria {h5_visita}",
-        f"{p_v5:.1f}%",
-        f"Lambda: {lambda_v_5:.2f}",
-    )
-
-    st.markdown("---")
-    st.subheader("📊 Top 5 Marcadores Exactos (Últimos 5 Duelos)")
-    st.dataframe(
-        pd.DataFrame(top_m_5), use_container_width=True, hide_index=True
-    )
-
-    st.markdown("---")
-    st.subheader("🛡️ Panel de Blindaje (Lupa 5 H2H)")
-    t7_1, t7_2, t7_3 = st.tabs(
-        ["🛡️ Hándicap", "⚽ Goles (Over/Under)", "🔥 BTTS"]
-    )
-    with t7_1:
-      w_2_l5 = np.mean(sim_gl_5 - sim_gv_5 >= 2) * 100
-      w_2_v5 = np.mean(sim_gl_5 - sim_gv_5 <= -2) * 100
-      st.write(f"- Victoria holgada {h5_local} (-1.5): **{w_2_l5:.1f}%**")
-      st.write(f"- Victoria holgada {h5_visita} (+1.5): **{w_2_v5:.1f}%**")
-    with t7_2:
-      tot_g_5 = sim_gl_5 + sim_gv_5
-      st.write(f"- Más de 2.5 Goles: **{np.mean(tot_g_5 > 2.5) * 100:.1f}%**")
-      st.write(f"- Menos de 3.5 Goles: **{np.mean(tot_g_5 < 3.5) * 100:.1f}%**")
-    with t7_3:
-      st.metric("Probabilidad BTTS", f"{btts_5:.1f}%")
 
