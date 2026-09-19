@@ -11,8 +11,8 @@ import streamlit as st
 # ==========================================
 st.set_page_config(
     page_title=(
-        "Zohan Pronostic v6.8 - Elite Fibonacci, H2H Directo & Detector de"
-        " Trampas"
+        "Zohan Pronostic v7.0 - Elite Fibonacci, H2H Global, Diagnóstico de"
+        " Rachas & Lupa 5 H2H"
     ),
     page_icon="⚽",
     layout="wide",
@@ -396,13 +396,14 @@ if archivo_subido is not None:
   except Exception:
     st.sidebar.error("Archivo .txt inválido.")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Tabla de Posiciones",
     "⚙️ Carga Directa Avanzada",
     "📝 Registrar Partido",
     "🔬 Auditoría Global y Cruzada",
     "🎯 Analizador Quirúrgico Elite",
     "🌍 Analizador Universal",
+    "⚔️ Últimos 5 Duelos H2H",
 ])
 
 # --- TAB 1: TABLA DE POSICIONES ---
@@ -590,13 +591,12 @@ with tab4:
 # --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE ---
 with tab5:
   st.header(
-      "🎯 Analizador Quirúrgico Elite - Fibonacci, H2H Directo & Detector de"
-      f" Trampas ({liga_sel})"
+      "🎯 Analizador Quirúrgico Elite - Fibonacci, H2H Directo & Diagnóstico"
+      f" ({liga_sel})"
   )
   st.info(
       "Los datos de temporada se extraen automáticamente de la tabla. Ingresa"
-      " directamente los datos de los últimos 10 enfrentamientos directos que"
-      " tú hayas extraído."
+      " directamente los datos de los últimos 10 enfrentamientos directos."
   )
 
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -614,7 +614,6 @@ with tab5:
   stats_l_base = datos_liga["tabla"][p_local]
   stats_v_base = datos_liga["tabla"][p_visita]
 
-  # Extracción automática desde la tabla
   m_pj_l = max(1, stats_l_base["PJ_L"])
   m_gf_l = stats_l_base["GF_L"]
   m_gc_l = stats_l_base["GC_L"]
@@ -639,11 +638,6 @@ with tab5:
       "⚔️ Bloque Cara a Cara: Ingreso Directo de Últimos 10 Partidos H2H",
       expanded=True,
   ):
-    st.write(
-        "Ingresa directamente el balance de resultados y los goles totales de"
-        " los **últimos 10 enfrentamientos directos** que extrajiste:"
-    )
-
     col_b1, col_b2, col_b3 = st.columns(3)
     with col_b1:
       h2h_wins_l = st.number_input(
@@ -666,15 +660,10 @@ with tab5:
           key="h2h_dir_wv",
       )
 
-    st.markdown("---")
-    st.write(
-        "Ingresa los **goles totales** anotados por cada bando en esos 10"
-        " partidos (para calcular las medias de goles):"
-    )
     col_g1, col_g2 = st.columns(2)
     with col_g1:
       h2h_goles_l = st.number_input(
-          f"Goles Totales de {p_local} en los 10 duelos",
+          f"Goles Totales de {p_local} en H2H",
           min_value=0.0,
           max_value=50.0,
           value=14.0,
@@ -683,25 +672,48 @@ with tab5:
       )
     with col_g2:
       h2h_goles_v = st.number_input(
-          f"Goles Totales de {p_visita} en los 10 duelos",
+          f"Goles Totales de {p_visita} en H2H",
           min_value=0.0,
           max_value=50.0,
           value=9.0,
           step=0.5,
           key="h2h_dir_gv",
       )
-
     h2h_pj = 10
 
   st.markdown("---")
-  if p_local == p_visita:
-    st.warning(
-        "⚠️ Selecciona dos equipos diferentes para realizar el análisis"
-        " cruzado."
+  with st.expander(
+      "🧠 Diagnóstico de Inercia y Presión Reciente (Opcional)", expanded=True
+  ):
+    st.write(
+        "Indica si alguno de los equipos arrastra una racha o presión especial"
+        " (ej. varios partidos sin ganar):"
     )
+    racha_l_op = st.selectbox(
+        f"Inercia reciente de {p_local}",
+        [
+            "Racha Normal / Estable",
+            "Acumula 3+ partidos sin ganar (Busca Rebote)",
+            "En plena racha ganadora",
+        ],
+        key="racha_l_elite",
+    )
+    racha_v_op = st.selectbox(
+        f"Inercia reciente de {p_visita}",
+        [
+            "Racha Normal / Estable",
+            "Acumula 3+ partidos sin ganar (Presión / Urgencia de sumar)",
+            "En plena racha ganadora",
+        ],
+        key="racha_v_elite",
+    )
+
+  st.markdown("---")
+  if p_local == p_visita:
+    st.warning("⚠️ Selecciona dos equipos diferentes.")
   else:
     if st.button(
-        "🔥 Ejecutar Simulación Estocástica & Análisis H2H Directo",
+        "🔥 Ejecutar Simulación Estocástica & Diagnóstico Táctico",
         type="primary",
     ):
       fibo_l = calcular_fibonacci_y_tendencia(
@@ -711,7 +723,6 @@ with tab5:
           stats_v_base, datos_liga["historial"], p_visita
       )
 
-      # Promedios de la tabla general
       gf_l_prom = m_gf_l / m_pj_l
       gc_l_prom = m_gc_l / m_pj_l
       gf_v_prom = m_gf_v / m_pj_v
@@ -720,116 +731,62 @@ with tab5:
       base_lambda_local = (gf_l_prom + gc_v_prom) / 2
       base_lambda_visita = (gf_v_prom + gc_l_prom) / 2
 
-      # Promedios del Cara a Cara ingresado directamente
       h2h_lambda_l = h2h_goles_l / h2h_pj
       h2h_lambda_v = h2h_goles_v / h2h_pj
 
-      # Ponderación final: 70% rendimiento de tabla + 30% tendencia directa H2H
       lambda_local = (0.7 * base_lambda_local) + (0.3 * h2h_lambda_l)
       lambda_visita = (0.7 * base_lambda_visita) + (0.3 * h2h_lambda_v)
+
+      if "sin ganar" in racha_l_op:
+        lambda_local *= 1.05
+      if "sin ganar" in racha_v_op:
+        lambda_visita *= 1.05
 
       mc_prob_l, mc_prob_e, mc_prob_v, sim_gl, sim_gv = simular_monte_carlo(
           lambda_local, lambda_visita, 10000
       )
       prom_sim_gl = np.mean(sim_gl)
       prom_sim_gv = np.mean(sim_gv)
-
-      # Cálculo de Ambos Anotan (BTTS)
       btts_prob = np.mean((sim_gl > 0) & (sim_gv > 0)) * 100
-
       top_marcadores = calcular_top_marcadores_exactos(
           lambda_local, lambda_visita, 5
       )
 
       st.markdown("---")
-      st.subheader(
-          "📋 Mensaje y Desglose Táctico Integral (Fibonacci & H2H Directo)"
-      )
+      st.subheader("📋 Informe de Diagnóstico y Desglose Táctico")
 
-      msg_clima = (
-          "### 🏟️ Radiografía y Contraste del Enfrentamiento:"
-          f" {p_local} vs {p_visita}\n\n"
-      )
-
-      msg_clima += f"#### 1️⃣ Tendencias y Niveles de Fibonacci\n"
+      msg_clima = f"### 🏟️ Análisis Integral: {p_local} vs {p_visita}\n\n"
+      msg_clima += f"#### 1️⃣ Estado de Rachas e Inercia Psicológica\n"
       msg_clima += (
-          f"- **{p_local} (Local):** Tendencia: *{fibo_l['tendencia']}* | Nivel:"
-          f" **{fibo_l['fibo_estado']}**.\n  > *{fibo_l['fibo_mensaje']}*\n"
+          f"- **{p_local}:** {racha_l_op} | Tendencia: *{fibo_l['tendencia']}*\n"
       )
       msg_clima += (
-          f"- **{p_visita} (Visitante):** Tendencia: *{fibo_v['tendencia']}* |"
-          f" Nivel: **{fibo_v['fibo_estado']}**.\n  > *{fibo_v['fibo_mensaje']}*\n\n"
+          f"- **{p_visita}:** {racha_v_op} | Tendencia:"
+          f" *{fibo_v['tendencia']}*\n"
       )
-
-      msg_clima += (
-          "#### 2️⃣ Análisis del Bloque H2H (Últimos 10 Duelos Ingresados"
-          " Directamente)\n"
-      )
-      msg_clima += (
-          f"- **Balance Directo (Resultados):** `{p_local}` ganó"
-          f" **{h2h_wins_l}** partidos, se registraron **{h2h_draws}** empates,"
-          f" y `{p_visita}` ganó **{h2h_wins_v}** partidos.\n"
-      )
-      msg_clima += (
-          f"- **Goles Totales y Promedios:** El local anotó `{h2h_goles_l}` goles"
-          f" (`{h2h_lambda_l:.2f}` p.p.) y el visitante `{h2h_goles_v}` goles"
-          f" (`{h2h_lambda_v:.2f}` p.p.).\n"
-      )
-      msg_clima += (
-          "- **Calibración Matemática:** El sistema integra este balance"
-          " directo con el rendimiento de la temporada para refinar la"
-          " expectativa estocástica.\n\n"
-      )
-
-      msg_clima += (
-          "#### 3️⃣ Motor Matemático (Monte Carlo & Poisson Integrado)\n"
-      )
-      msg_clima += (
-          "- **Expectativa de Goles (Lambda Final Ponderado):** Local:"
-          f" `{prom_sim_gl:.2f}` | Visitante: `{prom_sim_gv:.2f}`.\n"
-      )
-      msg_clima += (
-          "- **Probabilidades de Resultado:** Victoria Local:"
-          f" **{mc_prob_l:.1f}%** | Empate: **{mc_prob_e:.1f}%** | Victoria"
-          f" Visitante: **{mc_prob_v:.1f}%**.\n"
-      )
-      msg_clima += (
-          f"- **Probabilidad de Ambos Equipos Anotan (BTTS):**"
-          f" **{btts_prob:.1f}%**\n\n"
-      )
-
-      msg_clima += f"#### 4️⃣ Top 5 Posibles Marcadores Exactos\n"
-      for idx, m in enumerate(top_marcadores, 1):
+      if "sin ganar" in racha_l_op or "sin ganar" in racha_v_op:
         msg_clima += (
-            f"  {idx}. **{m['Marcador']}** (Probabilidad:"
-            f" **{m['Probabilidad (%)']}%**)\n"
-        )
-      msg_clima += "\n"
-
-      if mc_prob_l > mc_prob_v and mc_prob_l > mc_prob_e:
-        veredicto_final = (
-            "**Veredicto Táctico:** Escenario inclinado a favor del anfitrión"
-            f" (**{p_local}**). La inercia y los antecedentes directos"
-            " respaldan el favoritismo."
-        )
-      elif mc_prob_v > mc_prob_l and mc_prob_v > mc_prob_e:
-        veredicto_final = (
-            "**Veredicto Táctico:** Alerta de golpe foráneo. El visitante"
-            f" (**{p_visita}**) muestra argumentos numéricos idóneos para"
-            " puntuar fuera de casa."
+            "> ⚠️ **Nota de Alerta por Presión:** Se detecta urgencia competitiva"
+            " por mala racha acumulada. Esto incrementa la probabilidad de"
+            " rebote táctico, empates sufridos o respuestas forzadas en la"
+            " cancha.\n\n"
         )
       else:
-        veredicto_final = (
-            "**Veredicto Táctico:** Partido de máxima paridad. Las curvas de"
-            " Fibonacci y el historial apuntan a un duelo cerrado donde los"
-            " detalles definirán el marcador."
-        )
+        msg_clima += "\n"
 
-      msg_clima += f"#### 🎯 Conclusión del Analizador\n{veredicto_final}"
+      msg_clima += f"#### 2️⃣ Motor Matemático (Monte Carlo & Poisson)\n"
+      msg_clima += (
+          f"- Expectativa de Goles (Lambda): Local: `{prom_sim_gl:.2f}` |"
+          f" Visitante: `{prom_sim_gv:.2f}`\n"
+      )
+      msg_clima += (
+          f"- Probabilidades: Victoria Local: **{mc_prob_l:.1f}%** | Empate:"
+          f" **{mc_prob_e:.1f}%** | Victoria Visitante: **{mc_prob_v:.1f}%**\n"
+      )
+      msg_clima += f"- Probabilidad de BTTS: **{btts_prob:.1f}%**\n\n"
 
       st.success(msg_clima)
 
-      st.markdown("---")
       col_m1, col_m2, col_m3 = st.columns(3)
       col_m1.metric(
           f"Victoria {p_local}", f"{mc_prob_l:.1f}%", f"Goles: {prom_sim_gl:.2f}"
@@ -840,185 +797,37 @@ with tab5:
       )
 
       st.markdown("---")
-      st.subheader("🎯 Tabla de los 5 Posibles Marcadores Exactos")
-      df_marcadores = pd.DataFrame(top_marcadores)
-      st.dataframe(df_marcadores, use_container_width=True, hide_index=True)
+      st.subheader("🎯 Top 5 Marcadores Exactos")
+      st.dataframe(
+          pd.DataFrame(top_marcadores), use_container_width=True, hide_index=True
+      )
 
-      st.markdown("---")
-      st.subheader("🚨 Radar de Alerta Roja & Detector de Partidos Trampa")
-
-      UMBRAL_FRANCOTIRADOR = 60.0
-      UMBRAL_VISITANTE_ELITE = 53.0
-      UMBRAL_EMPATE_TRAMPA = 28.0
-
-      if mc_prob_l >= UMBRAL_FRANCOTIRADOR:
-        st.error(
-            f"🎯 **¡ALERTA ROJA (FAVORITO CLARO / FRANCOTIRADOR)!** El anfitrión"
-            f" **{p_local}** domina con un **{mc_prob_l:.1f}%** en la simulación"
-            " estocástica."
-        )
-      elif mc_prob_v >= UMBRAL_VISITANTE_ELITE:
-        st.error(
-            "🎯 **¡ALERTA ROJA (ASALTO FORÁNEO)!** El visitante"
-            f" **{p_visita}** muestra una fuerza del **{mc_prob_v:.1f}%**, ideal"
-            " para buscar valor afuera."
-        )
-      elif mc_prob_e >= UMBRAL_EMPATE_TRAMPA:
-        st.warning(
-            "⚠️ **¡PARTIDO TRAMPA / ALERTA DE EMPATE!** La probabilidad de"
-            f" empate se dispara al **{mc_prob_e:.1f}%**. Las matemáticas y el"
-            " historial H2H directo muestran un choque muy cerrado donde el"
-            " favorito está propenso a caer o repartir puntos."
-        )
-      else:
-        st.info(
-            "🛡️ **Carril Normal:** Partido dentro de parámetros estándar de"
-            " paridad moderada. Sin alertas extremas en el radar."
-        )
-
-      # ==========================================
-      # 🛡️ PANEL DE BLINDAJE AUTOMÁTICO PARA PARLAYS (LIGAS)
-      # ==========================================
       st.markdown("---")
       st.subheader("🛡️ Panel de Blindaje Automático para Parlays")
-
-      t_sub1, t_sub2, t_sub3, t_sub4 = st.tabs([
-          "🛡️ Termómetro de Hándicap",
-          "⚽ Filtro Automático de Goles",
-          "🔥 Mercado BTTS (Ambos Anotan)",
-          "🌟 Fortaleza Relativa vs Liga",
+      t_sub1, t_sub2, t_sub3 = st.tabs([
+          "🛡️ Hándicap",
+          "⚽ Filtro de Goles",
+          "🔥 Ambos Anotan (BTTS)",
       ])
-
       with t_sub1:
-        st.markdown(
-            "### Análisis de Holgura y Hándicap (Derivado de Monte Carlo)"
-        )
-        win_by_2_plus_l = np.mean(sim_gl - sim_gv >= 2) * 100
-        win_by_2_plus_v = np.mean(sim_gl - sim_gv <= -2) * 100
-        win_by_1 = np.mean(np.abs(sim_gl - sim_gv) == 1) * 100
-
-        st.write(
-            f"- **Probabilidad de victoria holgada Local (-1.5 Hándicap):**"
-            f" **{win_by_2_plus_l:.1f}%**"
-        )
-        st.write(
-            f"- **Probabilidad de victoria holgada Visitante (+1.5 Hándicap):**"
-            f" **{win_by_2_plus_v:.1f}%**"
-        )
-        st.write(
-            f"- **Probabilidad de partido ajustado (por 1 gol):**"
-            f" {win_by_1:.1f}%"
-        )
-
-        if win_by_2_plus_l > 45:
-          st.success(
-              "💡 **Sugerencia de Parlay:** El local muestra solidez para un"
-              " Hándicap Asiático -1 o victoria simple segura."
-          )
-        elif win_by_2_plus_v > 40:
-          st.warning(
-              "💡 **Sugerencia de Parlay:** El visitante tiene alta inercia de"
-              " victoria holgada fuera de casa."
-          )
-        else:
-          st.info(
-              "💡 **Sugerencia de Parlay:** Margen estrecho. Evitar hándicaps"
-              " grandes; preferir doble oportunidad o descartar para la"
-              " combinada."
-          )
-
+        w2_l = np.mean(sim_gl - sim_gv >= 2) * 100
+        w2_v = np.mean(sim_gl - sim_gv <= -2) * 100
+        st.write(f"- Victoria holgada Local (-1.5): **{w2_l:.1f}%**")
+        st.write(f"- Victoria holgada Visitante (+1.5): **{w2_v:.1f}%**")
       with t_sub2:
-        st.markdown("### Probabilidades de Líneas de Goles (Over / Under)")
-        total_goles_sim = sim_gl + sim_gv
-        prob_over_15 = np.mean(total_goles_sim > 1.5) * 100
-        prob_over_25 = np.mean(total_goles_sim > 2.5) * 100
-        prob_under_35 = np.mean(total_goles_sim < 3.5) * 100
-
-        st.write(
-            f"- **Probabilidad Más de 1.5 Goles (+1.5):** {prob_over_15:.1f}%"
-        )
-        st.write(
-            f"- **Probabilidad Más de 2.5 Goles (+2.5):** {prob_over_25:.1f}%"
-        )
-        st.write(
-            f"- **Probabilidad Menos de 3.5 Goles (-3.5):** {prob_under_35:.1f}%"
-        )
-
-        if prob_over_25 > 65:
-          st.success(
-              "🔥 **Filtro de Goles:** Alta expectativa de anotaciones."
-              " Excelente candidato para 'Más de 1.5 o 2.5 goles' en tu"
-              " combinada."
-          )
-        elif prob_over_25 < 40:
-          st.warning(
-              "⚠️ **Filtro de Goles:** Partido con tendencia de pocos goles."
-              " Cuidado con mercados de altas."
-          )
-        else:
-          st.info("⚖️ **Filtro de Goles:** Comportamiento estándar de goles.")
-
+        tot_g = sim_gl + sim_gv
+        st.write(f"- Más de 1.5 Goles: **{np.mean(tot_g > 1.5) * 100:.1f}%**")
+        st.write(f"- Más de 2.5 Goles: **{np.mean(tot_g > 2.5) * 100:.1f}%**")
       with t_sub3:
-        st.markdown("### Análisis del Mercado Ambos Equipos Anotan (BTTS)")
-        st.metric("Probabilidad de BTTS (Sí Marcan Ambos)", f"{btts_prob:.1f}%")
-        if btts_prob >= 62:
-          st.success(
-              "🔥 **Mercado BTTS:** Excelente opción para combinada. Alta"
-              " probabilidad de intercambio de goles."
-          )
-        elif btts_prob <= 40:
-          st.warning(
-              "⚠️ **Mercado BTTS:** Tendencia baja. Riesgo de que uno de los"
-              " dos equipos se quede sin anotar."
-          )
-        else:
-          st.info(
-              "⚖️ **Mercado BTTS:** Comportamiento estándar sin polarización"
-              " extrema."
-          )
-
-      with t_sub4:
-        st.markdown("### Comparativa de Desempeño Relativo vs Media")
-        media_liga_goles = (
-            (m_gf_l + m_gf_v) / (m_pj_l + m_pj_v)
-            if (m_pj_l + m_pj_v) > 0
-            else 1.3
-        )
-        fuerza_ataque_l = lambda_local / max(0.5, media_liga_goles)
-        fuerza_ataque_v = lambda_visita / max(0.5, media_liga_goles)
-
-        st.write(
-            f"- **Índice de Fuerza Ofensiva Local vs Media:**"
-            f" **{fuerza_ataque_l:.2f}x**"
-        )
-        st.write(
-            f"- **Índice de Fuerza Ofensiva Visitante vs Media:**"
-            f" **{fuerza_ataque_v:.2f}x**"
-        )
-
-        if fuerza_ataque_l > 1.25 and mc_prob_l > 55:
-          st.success(
-              "🌟 **Fortaleza Relativa:** El local está muy por encima de la"
-              " media de su liga. Categoría **Francotirador Aprobado** para"
-              " parlay."
-          )
-        elif mc_prob_e > 33:
-          st.warning(
-              "🚨 **Alerta de Fortaleza:** Desequilibrio mínimo con alto riesgo"
-              " de empate."
-          )
-        else:
-          st.info(
-              "ℹ️ **Fortaleza Relativa:** Comportamiento competitivo normal sin"
-              " anomalías extremas."
-          )
+        st.metric("Probabilidad BTTS", f"{btts_prob:.1f}%")
 
 # --- TAB 6: ANALIZADOR UNIVERSAL ---
 with tab6:
-  st.header("🌍 Analizador Universal (Datos Completos de Ambos Equipos + H2H)")
+  st.header(
+      "🌍 Analizador Universal (Datos Completos + Diagnóstico de Rachas)"
+  )
   st.info(
-      "Introduce los nombres y todas las estadísticas de ambos equipos"
-      " (rendimiento en casa y de visitante para los dos) junto con el"
+      "Introduce el rendimiento completo de ambos equipos (casa y afuera) y el"
       " historial directo."
   )
 
@@ -1038,24 +847,24 @@ with tab6:
   with uc_l1:
     st.markdown(f"**🏠 ¿Cómo juega {u_local} en su CASA?**")
     ul_pj_c = st.number_input(
-        "Partidos Jugados en Casa", min_value=1, value=10, key="ul_pjc"
+        "Partidos en Casa", min_value=1, value=10, key="ul_pjc"
     )
     ul_gf_c = st.number_input(
-        "Goles a Favor en Casa", min_value=0.0, value=18.0, key="ul_gfc"
+        "Goles Favor en Casa", min_value=0.0, value=18.0, key="ul_gfc"
     )
     ul_gc_c = st.number_input(
-        "Goles en Contra en Casa", min_value=0.0, value=8.0, key="ul_gcc"
+        "Goles Contra en Casa", min_value=0.0, value=8.0, key="ul_gcc"
     )
   with uc_l2:
-    st.markdown(f"**✈️ ¿Cómo juega {u_local} cuando va de VISITANTE?**")
+    st.markdown(f"**✈️ ¿Cómo juega {u_local} de VISITANTE?**")
     ul_pj_f = st.number_input(
-        "Partidos Jugados Afuera", min_value=1, value=10, key="ul_pjf"
+        "Partidos Afuera", min_value=1, value=10, key="ul_pjf"
     )
     ul_gf_f = st.number_input(
-        "Goles a Favor Afuera", min_value=0.0, value=12.0, key="ul_gff"
+        "Goles Favor Afuera", min_value=0.0, value=12.0, key="ul_gff"
     )
     ul_gc_f = st.number_input(
-        "Goles en Contra Afuera", min_value=0.0, value=14.0, key="ul_gcf"
+        "Goles Contra Afuera", min_value=0.0, value=14.0, key="ul_gcf"
     )
 
   st.markdown("---")
@@ -1064,33 +873,28 @@ with tab6:
   with uc_v1:
     st.markdown(f"**🏠 ¿Cómo juega {u_visita} en su CASA?**")
     uv_pj_c = st.number_input(
-        "Partidos Jugados en Casa", min_value=1, value=10, key="uv_pjc"
+        "Partidos en Casa", min_value=1, value=10, key="uv_pjc"
     )
     uv_gf_c = st.number_input(
-        "Goles a Favor en Casa", min_value=0.0, value=15.0, key="uv_gfc"
+        "Goles Favor en Casa", min_value=0.0, value=15.0, key="uv_gfc"
     )
     uv_gc_c = st.number_input(
-        "Goles en Contra en Casa", min_value=0.0, value=10.0, key="uv_gcc"
+        "Goles Contra en Casa", min_value=0.0, value=10.0, key="uv_gcc"
     )
   with uc_v2:
-    st.markdown(f"**✈️ ¿Cómo juega {u_visita} cuando va de VISITANTE?**")
+    st.markdown(f"**✈️ ¿Cómo juega {u_visita} de VISITANTE?**")
     uv_pj_f = st.number_input(
-        "Partidos Jugados Afuera", min_value=1, value=10, key="uv_pjf"
+        "Partidos Afuera", min_value=1, value=10, key="uv_pjf"
     )
     uv_gf_f = st.number_input(
-        "Goles a Favor Afuera", min_value=0.0, value=10.0, key="uv_gff"
+        "Goles Favor Afuera", min_value=0.0, value=10.0, key="uv_gff"
     )
     uv_gc_f = st.number_input(
-        "Goles en Contra Afuera", min_value=0.0, value=15.0, key="uv_gcf"
+        "Goles Contra Afuera", min_value=0.0, value=15.0, key="uv_gcf"
     )
 
   st.markdown("---")
   st.subheader("⚔️ 3. Historial Cara a Cara (H2H - Últimos 10 Duelos)")
-  st.write(
-      "Indica quién ha ganado más, los empates y los goles totales de esos"
-      " duelos directos:"
-  )
-
   uh_1, uh_2, uh_3 = st.columns(3)
   with uh_1:
     uh_wins_l = st.number_input(
@@ -1108,21 +912,33 @@ with tab6:
   uh_g1, uh_g2 = st.columns(2)
   with uh_g1:
     uh_goles_l = st.number_input(
-        f"Goles totales de {u_local} en el H2H",
-        min_value=0.0,
-        value=14.0,
-        key="uh_gl",
+        f"Goles de {u_local} en H2H", min_value=0.0, value=14.0, key="uh_gl"
     )
   with uh_g2:
     uh_goles_v = st.number_input(
-        f"Goles totales de {u_visita} en el H2H",
-        min_value=0.0,
-        value=11.0,
-        key="uh_gv",
+        f"Goles de {u_visita} en H2H", min_value=0.0, value=11.0, key="uh_gv"
+    )
+
+  with st.expander("🧠 Diagnóstico de Rachas y Presión (Universal)", expanded=True):
+    u_racha_l = st.selectbox(
+        f"Racha reciente de {u_local}",
+        [
+            "Estable / Normal",
+            "Acumula varios partidos sin ganar (Busca romper mala racha)",
+        ],
+        key="ur_l",
+    )
+    u_racha_v = st.selectbox(
+        f"Racha reciente de {u_visita}",
+        [
+            "Estable / Normal",
+            "Acumula varios partidos sin ganar (Presión por sumar)",
+        ],
+        key="ur_v",
     )
 
   u_media_liga = st.slider(
-      "🌐 Promedio de Goles Esperado de esta Liga (Baseline)",
+      "🌐 Promedio de Goles de la Liga (Baseline)",
       min_value=1.0,
       max_value=2.0,
       value=1.35,
@@ -1141,6 +957,11 @@ with tab6:
     lambda_local_final = (lambda_l_base * 0.7) + (h2h_l * 0.3)
     lambda_visita_final = (lambda_v_base * 0.7) + (h2h_v * 0.3)
 
+    if "sin ganar" in u_racha_l:
+      lambda_local_final *= 1.05
+    if "sin ganar" in u_racha_v:
+      lambda_visita_final *= 1.05
+
     p_l, p_e, p_v, sim_gl_u, sim_gv_u = simular_monte_carlo(
         lambda_local_final, lambda_visita_final, 10000
     )
@@ -1149,9 +970,15 @@ with tab6:
         lambda_local_final, lambda_visita_final, 5
     )
 
-    st.subheader(
-        f"🎯 Resultados del Análisis Universal: {u_local} vs {u_visita}"
-    )
+    st.subheader(f"🎯 Resultados Universales: {u_local} vs {u_visita}")
+
+    if "sin ganar" in u_racha_l or "sin ganar" in u_racha_v:
+      st.warning(
+          "⚠️ **Aviso de Diagnóstico:** Hay un equipo bajo presión por racha"
+          " negativa. Las probabilidades de reacción o empate se ven alteradas"
+          " por la urgencia psicológica."
+      )
+
     ur1, ur2, ur3 = st.columns(3)
     ur1.metric(
         f"Victoria {u_local}",
@@ -1166,60 +993,134 @@ with tab6:
     )
 
     st.markdown("---")
-    st.subheader("📊 Top 5 Marcadores Exactos Más Probables")
+    st.subheader("📊 Top 5 Marcadores Exactos")
     st.dataframe(pd.DataFrame(top_m_u), use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    st.subheader("🛡️ Panel de Blindaje y Mercados (Universal)")
-
-    ut1, ut2, ut3, ut4 = st.tabs([
-        "🛡️ Hándicap",
-        "⚽ Goles (Over/Under)",
-        "🔥 Ambos Anotan (BTTS)",
-        "🌟 Fortaleza Relativa",
-    ])
-
+    st.subheader("🛡️ Panel de Blindaje Universal")
+    ut1, ut2, ut3 = st.tabs(
+        ["🛡️ Hándicap", "⚽ Goles (Over/Under)", "🔥 BTTS"]
+    )
     with ut1:
       w_2_l = np.mean(sim_gl_u - sim_gv_u >= 2) * 100
       w_2_v = np.mean(sim_gl_u - sim_gv_u <= -2) * 100
-      st.write(
-          f"- **Probabilidad de victoria holgada Local (-1.5 Hándicap):**"
-          f" **{w_2_l:.1f}%**"
-      )
-      st.write(
-          f"- **Probabilidad de victoria holgada Visitante (+1.5 Hándicap):**"
-          f" **{w_2_v:.1f}%**"
-      )
-
+      st.write(f"- Victoria holgada Local (-1.5): **{w_2_l:.1f}%**")
+      st.write(f"- Victoria holgada Visitante (+1.5): **{w_2_v:.1f}%**")
     with ut2:
       tot_g_u = sim_gl_u + sim_gv_u
-      st.write(
-          f"- **Más de 1.5 Goles (+1.5):**"
-          f" **{np.mean(tot_g_u > 1.5) * 100:.1f}%**"
-      )
-      st.write(
-          f"- **Más de 2.5 Goles (+2.5):**"
-          f" **{np.mean(tot_g_u > 2.5) * 100:.1f}%**"
-      )
-      st.write(
-          f"- **Menos de 3.5 Goles (-3.5):**"
-          f" **{np.mean(tot_g_u < 3.5) * 100:.1f}%**"
-      )
-
+      st.write(f"- Más de 2.5 Goles: **{np.mean(tot_g_u > 2.5) * 100:.1f}%**")
+      st.write(f"- Menos de 3.5 Goles: **{np.mean(tot_g_u < 3.5) * 100:.1f}%**")
     with ut3:
-      st.metric(
-          "Probabilidad de Ambos Equipos Anotan (BTTS)", f"{btts_u:.1f}%"
-      )
-      if btts_u >= 62:
-        st.success(
-            "🔥 Alta tendencia a que ambos equipos marquen en este encuentro."
-        )
-      else:
-        st.info("⚖️ Comportamiento estándar para el mercado de goles.")
+      st.metric("Probabilidad BTTS", f"{btts_u:.1f}%")
 
-    with ut4:
-      f_l_rel = lambda_local_final / u_media_liga
-      f_v_rel = lambda_visita_final / u_media_liga
-      st.write(f"- **Fuerza Ofensiva Local vs Media:** **{f_l_rel:.2f}x**")
-      st.write(f"- **Fuerza Ofensiva Visitante vs Media:** **{f_v_rel:.2f}x**")
+# --- TAB 7: ÚLTIMOS 5 DUELOS H2H (LUPA RECIENTE) ---
+with tab7:
+  st.header("⚔️ Lupa Quirúrgica: Últimos 5 Duelos Directos (H2H Reciente)")
+  st.info(
+      "Introduce los nombres de los equipos y anota los resultados exactos de"
+      " sus últimos 5 enfrentamientos directos globales (sin importar la"
+      " cancha). La aplicación procesará esta inercia reciente de manera"
+      " exclusiva."
+  )
+
+  c7_1, c7_2 = st.columns(2)
+  with c7_1:
+    h5_local = st.text_input(
+        "Equipo Local", value="Equipo Local", key="h5_loc_name"
+    )
+  with c7_2:
+    h5_visita = st.text_input(
+        "Equipo Visitante", value="Equipo Visitante", key="h5_vis_name"
+    )
+
+  st.markdown("---")
+  st.subheader("📋 Ingresa los Marcadores de los Últimos 5 Enfrentamientos")
+
+  # 5 partidos input
+  match_scores = []
+  for i in range(1, 6):
+    st.markdown(f"**Partido #{i} (Más reciente {'=' if i == 1 else ''})**")
+    col_m1, col_m2 = st.columns(2)
+    with col_m1:
+      g_l = st.number_input(
+          f"Goles {h5_local}",
+          min_value=0,
+          max_value=15,
+          value=1 if i % 2 != 0 else 0,
+          key=f"h5_g_l_{i}",
+      )
+    with col_m2:
+      g_v = st.number_input(
+          f"Goles {h5_visita}",
+          min_value=0,
+          max_value=15,
+          value=1 if i % 2 == 0 else 2,
+          key=f"h5_g_v_{i}",
+      )
+    match_scores.append((g_l, g_v))
+    st.write("")
+
+  st.markdown("---")
+  if st.button("🚀 Ejecutar Análisis Exclusivo de Últimos 5 H2H", type="primary"):
+    # Calcular promedios exclusivos de estos 5 partidos
+    total_gl_5 = sum([m[0] for m in match_scores])
+    total_gv_5 = sum([m[1] for m in match_scores])
+
+    lambda_l_5 = total_gl_5 / 5.0
+    lambda_v_5 = total_gv_5 / 5.0
+
+    p_l5, p_e5, p_v5, sim_gl_5, sim_gv_5 = simular_monte_carlo(
+        lambda_l_5, lambda_v_5, 10000
+    )
+    btts_5 = np.mean((sim_gl_5 > 0) & (sim_gv_5 > 0)) * 100
+    top_m_5 = calcular_top_marcadores_exactos(lambda_l_5, lambda_v_5, 5)
+
+    st.subheader(
+        f"🎯 Resultados basados en la Inercia de los Últimos 5 Duelos: {h5_local}"
+        f" vs {h5_visita}"
+    )
+
+    # Diagnóstico narrativo rápido
+    st.info(
+        f"💡 **Radiografía de los 5 Duelos:** Entre ambos se han anotado un"
+        f" promedio de `{lambda_l_5:.2f}` goles para {h5_local} y"
+        f" `{lambda_v_5:.2f}` goles para {h5_visita} por partido en sus"
+        " enfrentamientos directos recientes."
+    )
+
+    m7_1, m7_2, m7_3 = st.columns(3)
+    m7_1.metric(
+        f"Victoria {h5_local}",
+        f"{p_l5:.1f}%",
+        f"Lambda: {lambda_l_5:.2f}",
+    )
+    m7_2.metric("Empate H2H", f"{p_e5:.1f}%")
+    m7_3.metric(
+        f"Victoria {h5_visita}",
+        f"{p_v5:.1f}%",
+        f"Lambda: {lambda_v_5:.2f}",
+    )
+
+    st.markdown("---")
+    st.subheader("📊 Top 5 Marcadores Exactos (Últimos 5 Duelos)")
+    st.dataframe(
+        pd.DataFrame(top_m_5), use_container_width=True, hide_index=True
+    )
+
+    st.markdown("---")
+    st.subheader("🛡️ Panel de Blindaje (Lupa 5 H2H)")
+    t7_1, t7_2, t7_3 = st.tabs(
+        ["🛡️ Hándicap", "⚽ Goles (Over/Under)", "🔥 BTTS"]
+    )
+    with t7_1:
+      w_2_l5 = np.mean(sim_gl_5 - sim_gv_5 >= 2) * 100
+      w_2_v5 = np.mean(sim_gl_5 - sim_gv_5 <= -2) * 100
+      st.write(f"- Victoria holgada {h5_local} (-1.5): **{w_2_l5:.1f}%**")
+      st.write(f"- Victoria holgada {h5_visita} (+1.5): **{w_2_v5:.1f}%**")
+    with t7_2:
+      tot_g_5 = sim_gl_5 + sim_gv_5
+      st.write(f"- Más de 2.5 Goles: **{np.mean(tot_g_5 > 2.5) * 100:.1f}%**")
+      st.write(f"- Menos de 3.5 Goles: **{np.mean(tot_g_5 < 3.5) * 100:.1f}%**")
+    with t7_3:
+      st.metric("Probabilidad BTTS", f"{btts_5:.1f}%")
 
