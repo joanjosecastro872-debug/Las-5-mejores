@@ -11,8 +11,7 @@ import streamlit as st
 # ==========================================
 st.set_page_config(
     page_title=(
-        "Zohan Pronostic v7.1 - Elite Unificado, Rachas Automáticas & Desglose"
-        " Global"
+        "Zohan Pronostic v7.3 - Elite Unificado, Reporte Global Inicial & Comas"
     ),
     page_icon="⚽",
     layout="wide",
@@ -325,7 +324,6 @@ def calcular_fibonacci_y_tendencia(stats_eq, historial, equipo):
 
 
 def analizar_racha_automatica(historial, equipo):
-  """Analiza automáticamente el historial guardado para detectar rachas."""
   partidos_equipo = []
   for m in reversed(historial):
     if m["local"] == equipo or m["visitante"] == equipo:
@@ -346,7 +344,6 @@ def analizar_racha_automatica(historial, equipo):
     return "Racha Normal / Estable (Sin historial registrado)", 1.0
 
   ultimos_3 = partidos_equipo[:3]
-  # Si jugó al menos 3 partidos y ninguno fue victoria (P o E)
   if len(ultimos_3) >= 3 and all(r in ["P", "E"] for r in ultimos_3):
     return (
         "Acumula 3+ partidos sin ganar (Busca Rebote / Urgencia)",
@@ -621,7 +618,7 @@ with tab4:
     m3.metric("Nivel Fibonacci", fibo_audit["fibo_estado"])
     st.info(f"💡 **Nota Táctica:** {fibo_audit['fibo_mensaje']}")
 
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (UNIFICADO CON H2H 10 + ÚLTIMOS 5 + DESGLOSE GLOBAL + RACHAS AUTOMÁTICAS) ---
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (UNIFICADO CON ENTRADA POR COMAS) ---
 with tab5:
   st.header(
       "🎯 Analizador Quirúrgico Elite - Fibonacci, Desglose Global, H2H & Rachas"
@@ -629,8 +626,8 @@ with tab5:
   )
   st.info(
       "Los datos de temporada y el análisis global de ambos equipos se leen"
-      " automáticamente. Ingresa el historial general H2H y los últimos 5"
-      " marcadores exactos."
+      " automáticamente. Ingresa el historial general H2H y los últimos"
+      " marcadores en formato de texto."
   )
 
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -744,35 +741,40 @@ with tab5:
 
   st.markdown("---")
   with st.expander(
-      "🔥 Bloque 2: Últimos 5 Enfrentamientos Directos (Marcadores Exactos)",
+      "🔥 Bloque 2: Últimos Enfrentamientos Directos (Entrada por Comas)",
       expanded=True,
   ):
     st.write(
-        "Introduce los marcadores de los últimos 5 duelos recientes entre"
-        " ambos:"
+        "Escribe los marcadores separados por comas en formato"
+        " **Local-Visita** (Ejemplo: `2-1, 1-0, 0-0, 2-2, 3-1`):"
     )
+    match_input_str = st.text_input(
+        "Marcadores recientes",
+        value="1-1, 2-1, 0-0, 1-0, 2-2",
+        help="Introduce los resultados divididos por guion y separados por coma.",
+    )
+
     h2h_5_goles_l_list = []
     h2h_5_goles_v_list = []
-    for idx_m in range(1, 6):
-      mc_col1, mc_col2 = st.columns(2)
-      with mc_col1:
-        g_l_ind = st.number_input(
-            f"Partido {idx_m} - Goles {p_local}",
-            min_value=0,
-            max_value=10,
-            value=1,
-            key=f"h2h_5_l_{idx_m}",
-        )
-      with mc_col2:
-        g_v_ind = st.number_input(
-            f"Partido {idx_m} - Goles {p_visita}",
-            min_value=0,
-            max_value=10,
-            value=1,
-            key=f"h2h_5_v_{idx_m}",
-        )
-      h2h_5_goles_l_list.append(g_l_ind)
-      h2h_5_goles_v_list.append(g_v_ind)
+
+    try:
+      for item in match_input_str.split(","):
+        item = item.strip()
+        if "-" in item:
+          g_l, g_v = item.split("-")
+          h2h_5_goles_l_list.append(float(g_l.strip()))
+          h2h_5_goles_v_list.append(float(g_v.strip()))
+    except Exception:
+      pass
+
+    if not h2h_5_goles_l_list:
+      h2h_5_goles_l_list = [1.0, 1.0, 1.0, 1.0, 1.0]
+      h2h_5_goles_v_list = [1.0, 1.0, 1.0, 1.0, 1.0]
+
+    st.write(
+        f"✅ *Se han detectado {len(h2h_5_goles_l_list)} partidos en la"
+        " secuencia.*"
+    )
 
   st.markdown("---")
   if p_local == p_visita:
@@ -801,10 +803,10 @@ with tab5:
       h2h_10_l = h2h_goles_l / 10.0
       h2h_10_v = h2h_goles_v / 10.0
 
-      h2h_5_l = sum(h2h_5_goles_l_list) / 5.0
-      h2h_5_v = sum(h2h_5_goles_v_list) / 5.0
+      n_partidos_h2h5 = max(1, len(h2h_5_goles_l_list))
+      h2h_5_l = sum(h2h_5_goles_l_list) / n_partidos_h2h5
+      h2h_5_v = sum(h2h_5_goles_v_list) / n_partidos_h2h5
 
-      # Fusión unificada ponderada aplicando multiplicador automático de racha
       lambda_local = (
           (0.50 * base_lambda_local)
           + (0.25 * h2h_10_l)
@@ -829,14 +831,35 @@ with tab5:
       st.markdown("---")
       st.subheader("📋 Informe de Diagnóstico y Desglose Táctico")
 
+      # REPORTE DE TEXTO INICIANDO DIRECTAMENTE CON EL ANÁLISIS GLOBAL DE TEMPORADA
       msg_clima = f"### 🏟️ Análisis Integral: {p_local} vs {p_visita}\n\n"
-      msg_clima += f"#### 1️⃣ Estado de Rachas & Inercia (Automático)\n"
+
       msg_clima += (
-          f"- **{p_local}:** {racha_l_txt} | Tendencia: *{fibo_l['tendencia']}*\n"
+          "#### 1️⃣ Radiografía y Comportamiento Global de la Temporada\n"
       )
       msg_clima += (
-          f"- **{p_visita}:** {racha_v_txt} | Tendencia:"
-          f" *{fibo_v['tendencia']}*\n"
+          f"- **{p_local}:** Viene jugando la temporada con una eficiencia"
+          f" global del **{fibo_l['eficiencia']}%** (Acumula"
+          f" `{stats_l_base['Pts']}` puntos en `{stats_l_base['PJ']}` partidos)."
+          f" Goles Favor: `{stats_l_base['GF']}` | Goles Contra:"
+          f" `{stats_l_base['GC']}` | Tendencia: *{fibo_l['tendencia']}*.\n"
+      )
+      msg_clima += (
+          f"- **{p_visita}:** Viene jugando la temporada con una eficiencia"
+          f" global del **{fibo_v['eficiencia']}%** (Acumula"
+          f" `{stats_v_base['Pts']}` puntos en `{stats_v_base['PJ']}` partidos)."
+          f" Goles Favor: `{stats_v_base['GF']}` | Goles Contra:"
+          f" `{stats_v_base['GC']}` | Tendencia: *{fibo_v['tendencia']}*.\n\n"
+      )
+
+      msg_clima += "#### 2️⃣ Estado de Rachas & Inercia (Automático)\n"
+      msg_clima += (
+          f"- **{p_local}:** {racha_l_txt} | Fibonacci:"
+          f" {fibo_l['fibo_estado']}\n"
+      )
+      msg_clima += (
+          f"- **{p_visita}:** {racha_v_txt} | Fibonacci:"
+          f" {fibo_v['fibo_estado']}\n"
       )
       if mult_l > 1.0 or mult_v > 1.0:
         msg_clima += (
@@ -847,7 +870,6 @@ with tab5:
       else:
         msg_clima += "\n"
 
-      # Detector de Partido Trampa
       if mc_prob_e >= 30.0:
         msg_clima += (
             "> 🚨 **ALERTA DE PARTIDO TRAMPA:** El porcentaje de empate supera"
@@ -855,7 +877,7 @@ with tab5:
             " estadísticamente; alto riesgo de repartir puntos.\n\n"
         )
 
-      msg_clima += f"#### 2️⃣ Motor Matemático Unificado (Monte Carlo & Poisson)\n"
+      msg_clima += f"#### 3️⃣ Motor Matemático Unificado (Monte Carlo & Poisson)\n"
       msg_clima += (
           f"- Expectativa de Goles (Lambda): Local: `{prom_sim_gl:.2f}` |"
           f" Visitante: `{prom_sim_gv:.2f}`\n"
@@ -883,7 +905,6 @@ with tab5:
           pd.DataFrame(top_marcadores), use_container_width=True, hide_index=True
       )
 
-      # Panel de Blindaje Completo
       st.markdown("---")
       st.subheader("🛡️ Panel de Blindaje Automático para Parlays")
       t_sub1, t_sub2, t_sub3 = st.tabs([
