@@ -11,7 +11,7 @@ import streamlit as st
 # ==========================================
 st.set_page_config(
     page_title=(
-        "Zohan Pronostic v7.5 - Elite con Casillas de Enfrentamientos Directos"
+        "Zohan Pronostic v7.6 - Elite con Alertas Múltiples de Francotirador"
     ),
     page_icon="⚽",
     layout="wide",
@@ -618,16 +618,15 @@ with tab4:
     m3.metric("Nivel Fibonacci", fibo_audit["fibo_estado"])
     st.info(f"💡 **Nota Táctica:** {fibo_audit['fibo_mensaje']}")
 
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (UNIFICADO CON CASILLAS) ---
+# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE (CON ALERTAS MÚLTIPLES) ---
 with tab5:
   st.header(
-      "🎯 Analizador Quirúrgico Elite - Alerta de Francotirador, Fibonacci,"
-      f" Desglose Global & H2H ({liga_sel})"
+      "🎯 Analizador Quirúrgico Elite - Alertas Múltiples de Francotirador,"
+      f" Fibonacci, Desglose Global & H2H ({liga_sel})"
   )
   st.info(
-      "Los datos de temporada y el análisis global de ambos equipos se leen"
-      " automáticamente. Introduce los datos del H2H y los goles usando las"
-      " casillas independientes."
+      "Los datos de temporada y el análisis global se leen automáticamente."
+      " Introduce el H2H y los goles con las casillas independientes."
   )
 
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -837,66 +836,81 @@ with tab5:
       prom_sim_gl = np.mean(sim_gl)
       prom_sim_gv = np.mean(sim_gv)
       btts_prob = np.mean((sim_gl > 0) & (sim_gv > 0)) * 100
+      over_2_5_prob = np.mean((sim_gl + sim_gv) > 2.5) * 100
       top_marcadores = calcular_top_marcadores_exactos(
           lambda_local, lambda_visita, 5
       )
 
-      # LÓGICA DE LA ALERTA DE FRANCOTIRADOR
-      alerta_francotirador_activa = False
-      sniper_tipo = ""
+      # SISTEMA DE ALERTAS MÚLTIPLES DE FRANCOTIRADOR (INDEPENDIENTES)
+      alertas_francotirador = []
+
       if mc_prob_l >= 65.0:
-        alerta_francotirador_activa = True
-        sniper_tipo = (
-            f"🎯 **ALERTA DE FRANCOTIRADOR ACTIVA:** Dominio absoluto de"
-            f" **{p_local}** con probabilidad superior al 65.0% ({mc_prob_l:.1f}%)."
-            " Objetivo claro para victoria directa o hándicap favorable."
+        alertas_francotirador.append(
+            f"🎯 **ALERTA FRANCOTIRADOR [VICTORIA LOCAL]:** Dominio absoluto de"
+            f" **{p_local}** con probabilidad de **{mc_prob_l:.1f}%**. Objetivo"
+            " ideal para victoria directa o hándicap favorable."
         )
-      elif mc_prob_v >= 55.0:
-        alerta_francotirador_activa = True
-        sniper_tipo = (
-            f"🎯 **ALERTA DE FRANCOTIRADOR ACTIVA:** Alta cuota de valor para"
-            f" **{p_visita}** como visitante ({mc_prob_v:.1f}%). Oportunidad de"
-            " golpe estratégico fuera de casa."
+
+      if mc_prob_v >= 55.0:
+        alertas_francotirador.append(
+            f"🎯 **ALERTA FRANCOTIRADOR [VICTORIA VISITANTE]:** Cuota de valor"
+            f" alta para **{p_visita}** como visitante con **{mc_prob_v:.1f}%**."
+            " Oportunidad estratégica fuera de casa."
         )
-      elif mc_prob_e >= 32.0:
-        alerta_francotirador_activa = True
-        sniper_tipo = (
-            "🎯 **ALERTA DE FRANCOTIRADOR ACTIVA (PARTIDO TRAMPA):** Alta"
-            f" concentración de empates ({mc_prob_e:.1f}%). Mercado ideal para"
-            " doble oportunidad o buscar la igualada táctica."
+
+      if mc_prob_e >= 32.0:
+        alertas_francotirador.append(
+            f"🎯 **ALERTA FRANCOTIRADOR [PARTIDO TRAMPA]:** Alta concentración"
+            f" de empates con **{mc_prob_e:.1f}%**. Mercado ideal para doble"
+            " oportunidad o asegurar la igualada táctica."
         )
-      elif btts_prob >= 68.0:
-        alerta_francotirador_activa = True
-        sniper_tipo = (
-            "🎯 **ALERTA DE FRANCOTIRADOR ACTIVA (GOL A GOL):** Probabilidad"
-            f" crítica de ambos anotan (**{btts_prob:.1f}%**). Alta fiabilidad"
-            " para el mercado de BTTS."
+
+      if btts_prob >= 68.0:
+        alertas_francotirador.append(
+            f"🎯 **ALERTA FRANCOTIRADOR [AMBOS ANOTAN / BTTS]:** Tendencia"
+            f" crítica de goles en ambos arcos con **{btts_prob:.1f}%**. Alta"
+            " fiabilidad para el mercado de BTTS."
+        )
+
+      if over_2_5_prob >= 65.0:
+        alertas_francotirador.append(
+            f"🎯 **ALERTA FRANCOTIRADOR [MÁS DE 2.5 GOLES]:** Alta expectativa"
+            f" ofensiva global con **{over_2_5_prob:.1f}%**. Excelente opción"
+            " para overs."
         )
 
       st.markdown("---")
       st.subheader("📋 Informe de Diagnóstico y Desglose Táctico")
 
-      msg_clima = f"### 🏟️ Análisis Integral: {p_local} vs {p_visita}\n\n"
+      # Mostrar TODAS las alertas fijas activas en la parte superior del informe
+      if alertas_francotirador:
+        for alerta in alertas_francotirador:
+          st.warning(alerta)
+      else:
+        st.info(
+            "ℹ️ Ningún mercado supera el umbral estricto de Francotirador en"
+            " esta simulación, pero puedes revisar las métricas detalladas"
+            " abajo."
+        )
 
-      if alerta_francotirador_activa:
-        msg_clima += f"{sniper_tipo}\n\n"
+      msg_clima = f"### 🏟️ Análisis Integral: {p_local} vs {p_visita}\n\n"
 
       msg_clima += (
           "#### 1️⃣ Radiografía y Comportamiento Global de la Temporada\n"
       )
       msg_clima += (
-          f"- **{p_local}:** Viene jugando la temporada con una eficiencia"
-          f" global del **{fibo_l['eficiencia']}%** (Acumula"
-          f" `{stats_l_base['Pts']}` puntos en `{stats_l_base['PJ']}` partidos)."
-          f" Goles Favor: `{stats_l_base['GF']}` | Goles Contra:"
-          f" `{stats_l_base['GC']}` | Tendencia: *{fibo_l['tendencia']}*.\n"
+          f"- **{p_local}:** Eficiencia global del **{fibo_l['eficiencia']}%**"
+          f" (Acumula `{stats_l_base['Pts']}` puntos en"
+          f" `{stats_l_base['PJ']}` partidos). Goles Favor:"
+          f" `{stats_l_base['GF']}` | Goles Contra: `{stats_l_base['GC']}` |"
+          f" Tendencia: *{fibo_l['tendencia']}*.\n"
       )
       msg_clima += (
-          f"- **{p_visita}:** Viene jugando la temporada con una eficiencia"
-          f" global del **{fibo_v['eficiencia']}%** (Acumula"
-          f" `{stats_v_base['Pts']}` puntos en `{stats_v_base['PJ']}` partidos)."
-          f" Goles Favor: `{stats_v_base['GF']}` | Goles Contra:"
-          f" `{stats_v_base['GC']}` | Tendencia: *{fibo_v['tendencia']}*.\n\n"
+          f"- **{p_visita}:** Eficiencia global del **{fibo_v['eficiencia']}%**"
+          f" (Acumula `{stats_v_base['Pts']}` puntos en"
+          f" `{stats_v_base['PJ']}` partidos). Goles Favor:"
+          f" `{stats_v_base['GF']}` | Goles Contra: `{stats_v_base['GC']}` |"
+          f" Tendencia: *{fibo_v['tendencia']}*.\n\n"
       )
 
       msg_clima += "#### 2️⃣ Estado de Rachas & Inercia (Automático)\n"
@@ -917,13 +931,6 @@ with tab5:
       else:
         msg_clima += "\n"
 
-      if mc_prob_e >= 30.0:
-        msg_clima += (
-            "> 🚨 **ALERTA DE PARTIDO TRAMPA:** El porcentaje de empate supera"
-            f" el umbral crítico ({mc_prob_e:.1f}%). Los equipos se neutralizan"
-            " estadísticamente; alto riesgo de repartir puntos.\n\n"
-        )
-
       msg_clima += f"#### 3️⃣ Motor Matemático Unificado (Monte Carlo & Poisson)\n"
       msg_clima += (
           f"- Expectativa de Goles (Lambda): Local: `{prom_sim_gl:.2f}` |"
@@ -933,12 +940,12 @@ with tab5:
           f"- Probabilidades: Victoria Local: **{mc_prob_l:.1f}%** | Empate:"
           f" **{mc_prob_e:.1f}%** | Victoria Visitante: **{mc_prob_v:.1f}%**\n"
       )
-      msg_clima += f"- Probabilidad de BTTS: **{btts_prob:.1f}%**\n\n"
+      msg_clima += (
+          f"- Probabilidad BTTS: **{btts_prob:.1f}%** | Más de 2.5 Goles:"
+          f" **{over_2_5_prob:.1f}%**\n\n"
+      )
 
       st.success(msg_clima)
-
-      if alerta_francotirador_activa:
-        st.warning(sniper_tipo)
 
       col_m1, col_m2, col_m3 = st.columns(3)
       col_m1.metric(
@@ -969,8 +976,10 @@ with tab5:
         st.write(f"- Victoria holgada Visitante (+1.5): **{w2_v:.1f}%**")
       with t_sub2:
         tot_g = sim_gl + sim_gv
-        st.write(f"- Más de 1.5 Goles: **{np.mean(tot_g > 1.5) * 100:.1f}%**")
-        st.write(f"- Más de 2.5 Goles: **{np.mean(tot_g > 2.5) * 100:.1f}%**")
+        st.write(
+            f"- Más de 1.5 Goles: **{np.mean(tot_g > 1.5) * 100:.1f}%**"
+        )
+        st.write(f"- Más de 2.5 Goles: **{over_2_5_prob:.1f}%**")
       with t_sub3:
         st.metric("Probabilidad BTTS", f"{btts_prob:.1f}%")
 
