@@ -1,2 +1,256 @@
 ​__init__.py
 utils/database_manager.py
+import json
+import os
+
+DB_FILE = "zohan_pronostic_db.json"
+
+LIGAS_EQUIPOS = {
+    "🇪🇸 LaLiga": [
+        "Athletic Club",
+        "Atlético de Madrid",
+        "CA Osasuna",
+        "Celta de Vigo",
+        "Deportivo Alavés",
+        "Deportivo de La Coruña",
+        "Elche CF",
+        "FC Barcelona",
+        "Getafe CF",
+        "Levante UD",
+        "Málaga CF",
+        "Racing de Santander",
+        "Rayo Vallecano",
+        "RCD Espanyol",
+        "Real Betis",
+        "Real Madrid",
+        "Real Sociedad",
+        "Sevilla FC",
+        "Valencia CF",
+        "Villarreal CF",
+    ],
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": [
+        "Arsenal FC",
+        "Aston Villa",
+        "AFC Bournemouth",
+        "Brentford FC",
+        "Brighton & Hove Albion",
+        "Chelsea FC",
+        "Coventry City",
+        "Crystal Palace",
+        "Everton FC",
+        "Fulham FC",
+        "Hull City",
+        "Ipswich Town",
+        "Leeds United",
+        "Liverpool FC",
+        "Manchester City",
+        "Manchester United",
+        "Newcastle United",
+        "Nottingham Forest",
+        "Sunderland AFC",
+        "Tottenham Hotspur",
+    ],
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": [
+        "Birmingham City",
+        "Blackburn Rovers",
+        "Bolton Wanderers",
+        "Bristol City",
+        "Burnley FC",
+        "Cardiff City",
+        "Charlton Athletic",
+        "Derby County",
+        "Lincoln City",
+        "Middlesbrough FC",
+        "Millwall FC",
+        "Norwich City",
+        "Portsmouth FC",
+        "Preston North End",
+        "Queens Park Rangers (QPR)",
+        "Sheffield United",
+        "Southampton FC",
+        "Stoke City",
+        "Swansea City",
+        "Watford FC",
+        "West Bromwich Albion",
+        "West Ham United",
+        "Wolverhampton Wanderers",
+        "Wrexham AFC",
+    ],
+    "🇮🇹 Serie A": [
+        "AC Milan",
+        "AC Monza",
+        "AS Roma",
+        "Atalanta BC",
+        "Bologna FC",
+        "Cagliari Calcio",
+        "Como 1907",
+        "Fiorentina",
+        "Frosinone Calcio",
+        "Genoa CFC",
+        "Inter de Milán",
+        "Juventus",
+        "Parma Calcio",
+        "Sassuolo",
+        "SS Lazio",
+        "SSC Napoli",
+        "Torino FC",
+        "Udinese Calcio",
+        "US Lecce",
+        "Venezia FC",
+    ],
+    "🇩🇪 Bundesliga": [
+        "1. FC Colonia",
+        "1. FC Union Berlin",
+        "1. FSV Mainz 05",
+        "Bayer 04 Leverkusen",
+        "Bayern Múnich",
+        "Borussia Dortmund",
+        "Borussia Mönchengladbach",
+        "Eintracht Frankfurt",
+        "FC Augsburg",
+        "Hamburger SV",
+        "Holstein Kiel",
+        "RB Leipzig",
+        "SC Friburgo",
+        "Schalke 04",
+        "SV Werder Bremen",
+        "TSG Hoffenheim",
+        "VfB Stuttgart",
+        "VfL Wolfsburg",
+    ],
+    "🇫🇷 Ligue 1": [
+        "AJ Auxerre",
+        "Angers SCO",
+        "AS Mónaco",
+        "ESTAC Troyes",
+        "FC Lorient",
+        "HAC Le Havre",
+        "LOSC Lille",
+        "OGC Niza",
+        "Olympique de Lyon",
+        "Olympique de Marsella",
+        "Paris FC",
+        "Paris Saint-Germain",
+        "RC Estrasburgo",
+        "RC Lens",
+        "Stade Brestois 29",
+        "Stade Rennais",
+        "Toulouse FC",
+        "Stade de Reims",
+    ],
+}
+
+
+def obtener_estructura_equipo():
+  return {
+      "PJ": 0,
+      "PG": 0,
+      "PE": 0,
+      "PP": 0,
+      "GF": 0,
+      "GC": 0,
+      "DG": 0,
+      "Pts": 0,
+      "PJ_L": 0,
+      "PG_L": 0,
+      "PE_L": 0,
+      "PP_L": 0,
+      "GF_L": 0,
+      "GC_L": 0,
+      "DG_L": 0,
+      "Pts_L": 0,
+      "PJ_V": 0,
+      "PG_V": 0,
+      "PE_V": 0,
+      "PP_V": 0,
+      "GF_V": 0,
+      "GC_V": 0,
+      "DG_V": 0,
+      "Pts_V": 0,
+  }
+
+
+def inicializar_liga_vacia(equipos):
+  tabla = {}
+  for eq in equipos:
+    tabla[eq] = obtener_estructura_equipo()
+  return {"tabla": tabla, "historial": []}
+
+
+def cargar_base_datos():
+  keys_requeridas = obtener_estructura_equipo()
+  data = {}
+  if os.path.exists(DB_FILE):
+    try:
+      with open(DB_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    except Exception:
+      data = {}
+
+  for liga, equipos in LIGAS_EQUIPOS.items():
+    if liga not in data:
+      data[liga] = inicializar_liga_vacia(equipos)
+    else:
+      if "tabla" not in data[liga]:
+        data[liga]["tabla"] = {}
+      if "historial" not in data[liga]:
+        data[liga]["historial"] = []
+
+      for eq in equipos:
+        if eq not in data[liga]["tabla"]:
+          data[liga]["tabla"][eq] = obtener_estructura_equipo()
+        else:
+          for key, val in keys_requeridas.items():
+            if key not in data[liga]["tabla"][eq]:
+              data[liga]["tabla"][eq][key] = val
+  return data
+
+
+def guardar_base_datos(data):
+  with open(DB_FILE, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def calcular_elo_snapshot(stats_eq):
+  pj = max(1, stats_eq.get("PJ", 1))
+  pts = stats_eq.get("Pts", 0)
+  dg = stats_eq.get("DG", 0)
+  promedio_pts = pts / pj
+  elo = 1500 + (promedio_pts * 110) + (dg * 10)
+  return round(elo)
+
+
+def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
+  factor = -1 if revertir else 1
+  if gl > gv:
+    pts_l, pts_v = 3, 0
+    pg_l, pe_l, pp_l = 1, 0, 0
+    pg_v, pe_v, pp_v = 0, 0, 1
+  elif gl < gv:
+    pts_l, pts_v = 0, 3
+    pg_l, pe_l, pp_l = 0, 0, 1
+    pg_v, pe_v, pp_v = 1, 0, 0
+  else:
+    pts_l, pts_v = 1, 1
+    pg_l, pe_l, pp_l = 0, 1, 0
+    pg_v, pe_v, pp_v = 0, 1, 0
+
+  eq_l = tabla[local]
+  eq_l["PJ"] += factor * 1
+  eq_l["PG"] += factor * pg_l
+  eq_l["PE"] += factor * pe_l
+  eq_l["PP"] += factor * pp_l
+  eq_l["GF"] += factor * gl
+  eq_l["GC"] += factor * gv
+  eq_l["DG"] = eq_l["GF"] - eq_l["GC"]
+  eq_l["Pts"] += factor * pts_l
+
+  eq_v = tabla[visitante]
+  eq_v["PJ"] += factor * 1
+  eq_v["PG"] += factor * pg_v
+  eq_v["PE"] += factor * pe_v
+  eq_v["PP"] += factor * pp_v
+  eq_v["GF"] += factor * gv
+  eq_v["GC"] += factor * gl
+  eq_v["DG"] = eq_v["GF"] - eq_v["GC"]
+  eq_v["Pts"] += factor * pts_v
