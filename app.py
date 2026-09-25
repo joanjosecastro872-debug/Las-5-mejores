@@ -49,14 +49,21 @@ def obtener_estructura_equipo():
 
 
 def sincronizar_con_espn(db_data):
-  """Consulta la API de ESPN y puebla dinámicamente cada liga con los equipos
+  """Consulta la API de ESPN con User-Agent para evitar bloqueos en Streamlit Cloud
 
-  y datos frescos oficiales.
+  y puebla dinámicamente cada liga con los equipos y datos frescos.
   """
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
+          " like Gecko) Chrome/122.0.0.0 Safari/537.36"
+      )
+  }
+
   for liga_nombre, slug in LEAGUES_ESPN_SLUGS.items():
     url = f"https://site.api.espn.com/apis/v2/sports/soccer/{slug}/standings"
     try:
-      response = requests.get(url, timeout=10)
+      response = requests.get(url, headers=headers, timeout=10)
       if response.status_code != 200:
         continue
       data_espn = response.json()
@@ -90,7 +97,6 @@ def sincronizar_con_espn(db_data):
         dg = int(stats.get("pointDifferential", gf - gc))
         pts = int(stats.get("points", 0))
 
-        # Distribución proporcional inteligente para local y visitante
         pj_l = max(1, pj // 2)
         pg_l = pg // 2
         pe_l = pe // 2
@@ -151,7 +157,6 @@ def cargar_base_datos():
     if liga not in data or not data[liga].get("tabla"):
       data[liga] = {"tabla": {}, "historial": []}
 
-  # Si la base de datos está completamente vacía, autoejecutamos la primera sincronización
   if all(len(data[l].get("tabla", {})) == 0 for l in LEAGUES_ESPN_SLUGS.keys()):
     data = sincronizar_con_espn(data)
     guardar_base_datos(data)
@@ -941,3 +946,4 @@ with tab7:
       generar_grafico_macd_y_rsi(
           datos_liga["historial"], eq_trading, datos_liga["tabla"][eq_trading]
       )
+á
