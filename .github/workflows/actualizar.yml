@@ -13,8 +13,6 @@ jobs:
     steps:
       - name: Clonar repositorio
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configurar Python
         uses: actions/setup-python@v4
@@ -31,6 +29,7 @@ jobs:
         run: |
           git config --global user.name "Bot Automático"
           git config --global user.email "bot@actions.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git add zohan_pronostic_db.json
           git commit -m "Actualización automática de resultados [skip ci]" || echo "Sin cambios"
           git push origin principal
