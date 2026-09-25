@@ -1,27 +1,455 @@
 import json
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.stats import poisson
 import streamlit as st
 
-# Importaciones desde nuestros módulos limpios
-from utils.database_manager import (
-    LIGAS_EQUIPOS,
-    aplicar_partido_a_tabla,
-    calcular_elo_snapshot,
-    cargar_base_datos,
-    guardar_base_datos,
-)
-from utils.quant_analytics import (
-    analizar_racha_automatica,
-    calcular_fibonacci_y_tendencia,
-    calcular_top_marcadores_exactos,
-    generar_grafico_macd_y_rsi,
-    simular_monte_carlo,
-)
+DB_FILE = "zohan_pronostic_db.json"
 
-# ==========================================
-# 1. CONFIGURACIÓN BASE Y ESTILO MÓVIL
-# ==========================================
+LIGAS_EQUIPOS = {
+    "🇪🇸 LaLiga": [
+        "Athletic Club",
+        "Atlético de Madrid",
+        "CA Osasuna",
+        "Celta de Vigo",
+        "Deportivo Alavés",
+        "Deportivo de La Coruña",
+        "Elche CF",
+        "FC Barcelona",
+        "Getafe CF",
+        "Levante UD",
+        "Málaga CF",
+        "Racing de Santander",
+        "Rayo Vallecano",
+        "RCD Espanyol",
+        "Real Betis",
+        "Real Madrid",
+        "Real Sociedad",
+        "Sevilla FC",
+        "Valencia CF",
+        "Villarreal CF",
+    ],
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": [
+        "Arsenal FC",
+        "Aston Villa",
+        "AFC Bournemouth",
+        "Brentford FC",
+        "Brighton & Hove Albion",
+        "Chelsea FC",
+        "Coventry City",
+        "Crystal Palace",
+        "Everton FC",
+        "Fulham FC",
+        "Hull City",
+        "Ipswich Town",
+        "Leeds United",
+        "Liverpool FC",
+        "Manchester City",
+        "Manchester United",
+        "Newcastle United",
+        "Nottingham Forest",
+        "Sunderland AFC",
+        "Tottenham Hotspur",
+    ],
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": [
+        "Birmingham City",
+        "Blackburn Rovers",
+        "Bolton Wanderers",
+        "Bristol City",
+        "Burnley FC",
+        "Cardiff City",
+        "Charlton Athletic",
+        "Derby County",
+        "Lincoln City",
+        "Middlesbrough FC",
+        "Millwall FC",
+        "Norwich City",
+        "Portsmouth FC",
+        "Preston North End",
+        "Queens Park Rangers (QPR)",
+        "Sheffield United",
+        "Southampton FC",
+        "Stoke City",
+        "Swansea City",
+        "Watford FC",
+        "West Bromwich Albion",
+        "West Ham United",
+        "Wolverhampton Wanderers",
+        "Wrexham AFC",
+    ],
+    "🇮🇹 Serie A": [
+        "AC Milan",
+        "AC Monza",
+        "AS Roma",
+        "Atalanta BC",
+        "Bologna FC",
+        "Cagliari Calcio",
+        "Como 1907",
+        "Fiorentina",
+        "Frosinone Calcio",
+        "Genoa CFC",
+        "Inter de Milán",
+        "Juventus",
+        "Parma Calcio",
+        "Sassuolo",
+        "SS Lazio",
+        "SSC Napoli",
+        "Torino FC",
+        "Udinese Calcio",
+        "US Lecce",
+        "Venezia FC",
+    ],
+    "🇩🇪 Bundesliga": [
+        "1. FC Colonia",
+        "1. FC Union Berlin",
+        "1. FSV Mainz 05",
+        "Bayer 04 Leverkusen",
+        "Bayern Múnich",
+        "Borussia Dortmund",
+        "Borussia Mönchengladbach",
+        "Eintracht Frankfurt",
+        "FC Augsburg",
+        "Hamburger SV",
+        "Holstein Kiel",
+        "RB Leipzig",
+        "SC Friburgo",
+        "Schalke 04",
+        "SV Werder Bremen",
+        "TSG Hoffenheim",
+        "VfB Stuttgart",
+        "VfL Wolfsburg",
+    ],
+    "🇫🇷 Ligue 1": [
+        "AJ Auxerre",
+        "Angers SCO",
+        "AS Mónaco",
+        "ESTAC Troyes",
+        "FC Lorient",
+        "HAC Le Havre",
+        "LOSC Lille",
+        "OGC Niza",
+        "Olympique de Lyon",
+        "Olympique de Marsella",
+        "Paris FC",
+        "Paris Saint-Germain",
+        "RC Estrasburgo",
+        "RC Lens",
+        "Stade Brestois 29",
+        "Stade Rennais",
+        "Toulouse FC",
+        "Stade de Reims",
+    ],
+}
+
+
+def obtener_estructura_equipo():
+  return {
+      "PJ": 0,
+      "PG": 0,
+      "PE": 0,
+      "PP": 0,
+      "GF": 0,
+      "GC": 0,
+      "DG": 0,
+      "Pts": 0,
+      "PJ_L": 0,
+      "PG_L": 0,
+      "PE_L": 0,
+      "PP_L": 0,
+      "GF_L": 0,
+      "GC_L": 0,
+      "DG_L": 0,
+      "Pts_L": 0,
+      "PJ_V": 0,
+      "PG_V": 0,
+      "PE_V": 0,
+      "PP_V": 0,
+      "GF_V": 0,
+      "GC_V": 0,
+      "DG_V": 0,
+      "Pts_V": 0,
+  }
+
+
+def inicializar_liga_vacia(equipos):
+  tabla = {}
+  for eq in equipos:
+    tabla[eq] = obtener_estructura_equipo()
+  return {"tabla": tabla, "historial": []}
+
+
+def cargar_base_datos():
+  keys_requeridas = obtener_estructura_equipo()
+  data = {}
+  if os.path.exists(DB_FILE):
+    try:
+      with open(DB_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    except Exception:
+      data = {}
+
+  for liga, equipos in LIGAS_EQUIPOS.items():
+    if liga not in data:
+      data[liga] = inicializar_liga_vacia(equipos)
+    else:
+      if "tabla" not in data[liga]:
+        data[liga]["tabla"] = {}
+      if "historial" not in data[liga]:
+        data[liga]["historial"] = []
+
+      for eq in equipos:
+        if eq not in data[liga]["tabla"]:
+          data[liga]["tabla"][eq] = obtener_estructura_equipo()
+        else:
+          for key, val in keys_requeridas.items():
+            if key not in data[liga]["tabla"][eq]:
+              data[liga]["tabla"][eq][key] = val
+  return data
+
+
+import os
+
+
+def guardar_base_datos(data):
+  with open(DB_FILE, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def calcular_elo_snapshot(stats_eq):
+  pj = max(1, stats_eq.get("PJ", 1))
+  pts = stats_eq.get("Pts", 0)
+  dg = stats_eq.get("DG", 0)
+  promedio_pts = pts / pj
+  elo = 1500 + (promedio_pts * 110) + (dg * 10)
+  return round(elo)
+
+
+def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
+  factor = -1 if revertir else 1
+  if gl > gv:
+    pts_l, pts_v = 3, 0
+    pg_l, pe_l, pp_l = 1, 0, 0
+    pg_v, pe_v, pp_v = 0, 0, 1
+  elif gl < gv:
+    pts_l, pts_v = 0, 3
+    pg_l, pe_l, pp_l = 0, 0, 1
+    pg_v, pe_v, pp_v = 1, 0, 0
+  else:
+    pts_l, pts_v = 1, 1
+    pg_l, pe_l, pp_l = 0, 1, 0
+    pg_v, pe_v, pp_v = 0, 1, 0
+
+  eq_l = tabla[local]
+  eq_l["PJ"] += factor * 1
+  eq_l["PG"] += factor * pg_l
+  eq_l["PE"] += factor * pe_l
+  eq_l["PP"] += factor * pp_l
+  eq_l["GF"] += factor * gl
+  eq_l["GC"] += factor * gv
+  eq_l["DG"] = eq_l["GF"] - eq_l["GC"]
+  eq_l["Pts"] += factor * pts_l
+
+  eq_v = tabla[visitante]
+  eq_v["PJ"] += factor * 1
+  eq_v["PG"] += factor * pg_v
+  eq_v["PE"] += factor * pe_v
+  eq_v["PP"] += factor * pp_v
+  eq_v["GF"] += factor * gv
+  eq_v["GC"] += factor * gl
+  eq_v["DG"] = eq_v["GF"] - eq_v["GC"]
+  eq_v["Pts"] += factor * pts_v
+
+
+def calcular_fibonacci_y_tendencia(stats_eq, equipo):
+  pj = max(1, stats_eq["PJ"])
+  pts = stats_eq["Pts"]
+  eficiencia = round((pts / (pj * 3)) * 100, 1) if pj > 0 else 0.0
+  ratio_rendimiento = eficiencia / 100.0
+
+  if ratio_rendimiento <= 0.35:
+    fibo_estado = "Soporte Crítico (0.382) - Toca Fondo / Rebote Inminente"
+    fibo_mensaje = (
+        "Zona de soporte profundo en retroceso de Fibonacci. Acumula presión"
+        " extrema, ideal para rebote alcista."
+    )
+    tendencia = "Bajista Agotada (Alta probabilidad de corrección positiva)"
+  elif ratio_rendimiento >= 0.70:
+    fibo_estado = "Zona de Resistencia Alta (0.236) - Techo de Rendimiento"
+    fibo_mensaje = (
+        "Parte alta de la curva de Fibonacci. Muestra máxima solidez pero con"
+        " riesgo de corrección a la baja si decae la intensidad."
+    )
+    tendencia = "Alcista Sólida (Inercia ganadora dominante)"
+  else:
+    fibo_estado = "Zona de Transición Neutral (0.500 - 0.618)"
+    fibo_mensaje = (
+        "Rango de equilibrio intermedio en la onda de Fibonacci, dependiente"
+        " de los ajustes tácticos del encuentro."
+    )
+    tendencia = "Estable / Transición Moderada"
+
+  return {
+      "eficiencia": eficiencia,
+      "fibo_estado": fibo_estado,
+      "fibo_mensaje": fibo_mensaje,
+      "tendencia": tendencia,
+  }
+
+
+def analizar_racha_automatica(historial, equipo):
+  partidos_equipo = []
+  for m in reversed(historial):
+    if m["local"] == equipo or m["visitante"] == equipo:
+      is_local = m["local"] == equipo
+      goles_favor = m["goles_local"] if is_local else m["goles_visita"]
+      goles_contra = m["goles_visita"] if is_local else m["goles_local"]
+      if goles_favor > goles_contra:
+        res = "G"
+      elif goles_favor < goles_contra:
+        res = "P"
+      else:
+        res = "E"
+      partidos_equipo.append(res)
+    if len(partidos_equipo) >= 5:
+      break
+
+  if not partidos_equipo:
+    return "Racha Normal / Estable (Sin historial registrado)", 1.0
+
+  ultimos_3 = partidos_equipo[:3]
+  if len(ultimos_3) >= 3 and all(r in ["P", "E"] for r in ultimos_3):
+    return (
+        "Acumula 3+ partidos sin ganar (Busca Rebote / Urgencia)",
+        1.05,
+    )
+  elif all(r == "G" for r in ultimos_3) and len(ultimos_3) >= 2:
+    return "En plena racha ganadora", 1.0
+  else:
+    return "Racha Normal / Estable", 1.0
+
+
+def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
+  goles_l = np.random.poisson(lambda_l, n_simulaciones)
+  goles_v = np.random.poisson(lambda_v, n_simulaciones)
+  wins_l = np.sum(goles_l > goles_v)
+  wins_v = np.sum(goles_l < goles_v)
+  empates = np.sum(goles_l == goles_v)
+  p_l = (wins_l / n_simulaciones) * 100
+  p_v = (wins_v / n_simulaciones) * 100
+  p_e = (empates / n_simulaciones) * 100
+  return p_l, p_e, p_v, goles_l, goles_v
+
+
+def calcular_top_marcadores_exactos(lambda_l, lambda_v, top_n=5):
+  goles_max = 6
+  pmf_l = poisson.pmf(np.arange(goles_max), lambda_l)
+  pmf_v = poisson.pmf(np.arange(goles_max), lambda_v)
+  matriz = np.outer(pmf_l, pmf_v)
+  resultados = []
+  for gl in range(goles_max):
+    for gv in range(goles_max):
+      prob = float(matriz[gl, gv]) * 100
+      resultados.append({
+          "Marcador": f"{gl} - {gv}",
+          "Goles Local": gl,
+          "Goles Visitante": gv,
+          "Probabilidad (%)": round(prob, 2),
+      })
+  resultados_ordenados = sorted(
+      resultados, key=lambda x: x["Probabilidad (%)"], reverse=True
+  )
+  return resultados_ordenados[:top_n]
+
+
+def generar_grafico_macd_y_rsi(historial, equipo):
+  puntos_partidos = []
+  for m in historial:
+    if m["local"] == equipo or m["visitante"] == equipo:
+      is_local = m["local"] == equipo
+      gf = m["goles_local"] if is_local else m["goles_visita"]
+      gc = m["goles_visita"] if is_local else m["goles_local"]
+      pts = 3 if gf > gc else (1 if gf == gc else 0)
+      puntos_partidos.append(pts)
+
+  if len(puntos_partidos) < 4:
+    plt.figure(figsize=(10, 4))
+    plt.text(
+        0.5,
+        0.5,
+        f"⚠️ El equipo {equipo} necesita al menos 4 partidos en el historial",
+        horizontalalignment="center",
+        verticalalignment="center",
+        color="white",
+        fontsize=12,
+    )
+    plt.gca().set_facecolor("#262730")
+    plt.gcf().patch.set_facecolor("#0E1117")
+    st.pyplot(plt.gcf())
+    return
+
+  s = pd.Series(puntos_partidos)
+  ema_fast = s.ewm(span=3, adjust=False).mean()
+  ema_slow = s.ewm(span=6, adjust=False).mean()
+  macd_line = ema_fast - ema_slow
+  signal_line = macd_line.ewm(span=3, adjust=False).mean()
+  rolling_pts = s.rolling(window=3, min_periods=1).mean()
+  rsi_line = (rolling_pts / 3.0) * 100
+
+  fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+  fig.patch.set_facecolor("#0E1117")
+  for ax in [ax1, ax2]:
+    ax.set_facecolor("#262730")
+    ax.tick_params(colors="white")
+    ax.xaxis.label.set_color("white")
+    ax.yaxis.label.set_color("white")
+    ax.title.set_color("white")
+    for spine in ax.spines.values():
+      spine.set_edgecolor("#555555")
+
+  ax1.plot(
+      macd_line.values,
+      label="Línea MACD (Impulso Rápido)",
+      color="#00FFCC",
+      linewidth=2,
+  )
+  ax1.plot(
+      signal_line.values,
+      label="Línea de Señal (Tendencia Lenta)",
+      color="#FF007F",
+      linewidth=2,
+      linestyle="--",
+  )
+  ax1.axhline(0, color="white", linestyle=":", alpha=0.5)
+  ax1.set_title(f"MACD - Impulso de Racha: {equipo}", fontsize=12)
+  ax1.legend(loc="upper left", facecolor="#0E1117", labelcolor="white")
+  ax1.grid(True, alpha=0.2)
+
+  ax2.plot(
+      rsi_line.values,
+      label="RSI Futbolístico (%)",
+      color="#FFD700",
+      linewidth=2,
+  )
+  ax2.axhline(
+      70, color="red", linestyle="--", alpha=0.7, label="Zona Sobrecompra (Techo)"
+  )
+  ax2.axhline(
+      30,
+      color="green",
+      linestyle="--",
+      alpha=0.7,
+      label="Zona Sobrevendido (Suelo)",
+  )
+  ax2.set_title(f"RSI - Termómetro de Sobrecompra/Suelo: {equipo}", fontsize=12)
+  ax2.set_xlabel("Partidos Recientes (Cronológico)", fontsize=10)
+  ax2.legend(loc="upper left", facecolor="#0E1117", labelcolor="white")
+  ax2.grid(True, alpha=0.2)
+
+  plt.tight_layout()
+  st.pyplot(fig)
+
+
 st.set_page_config(
     page_title=(
         "Zohan Pronostic v7.9 - Modular Elite con Alertas & Spinner"
@@ -51,9 +479,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ==========================================
-# 2. INTERFAZ STREAMLIT
-# ==========================================
 db = cargar_base_datos()
 
 liga_sel = st.sidebar.selectbox(
@@ -95,7 +520,6 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📈 Trading MACD & RSI",
 ])
 
-# --- TAB 1: TABLA DE POSICIONES & ELO ---
 with tab1:
   st.header(f"Tabla de Posiciones y Jerarquía Elo - {liga_sel}")
   if "vista_tabla" not in st.session_state:
@@ -167,7 +591,6 @@ with tab1:
   df_v = df_v.sort_values(by=["Pts", "DG", "GF", "Elo"], ascending=False)
   st.dataframe(df_v, use_container_width=True)
 
-# --- TAB 2: CARGA DIRECTA AVANZADA ---
 with tab2:
   st.header("⚙️ Carga Directa Avanzada por Equipo")
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -229,7 +652,6 @@ with tab2:
       st.success("¡Guardado con éxito!")
       st.rerun()
 
-# --- TAB 3: REGISTRO PARTIDO (Con Spinner Anti Doble Clic) ---
 with tab3:
   st.header("Registrar Partido")
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -262,7 +684,6 @@ with tab3:
         st.success("¡Partido registrado con éxito!")
         st.rerun()
 
-# --- TAB 4: AUDITORÍA GLOBAL Y CRUZADA ---
 with tab4:
   st.header("🔬 Auditoría Global y Examen Cruzado por Equipo")
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
@@ -271,12 +692,10 @@ with tab4:
       equipos_disponibles,
       key="select_audit_eq",
   )
-
   if eq_audit:
     stats_audit = datos_liga["tabla"][eq_audit]
     fibo_audit = calcular_fibonacci_y_tendencia(stats_audit, eq_audit)
     elo_audit = calcular_elo_snapshot(stats_audit)
-
     st.markdown("---")
     st.subheader(f"📋 Radiografía Global, Elo & Fibonacci: {eq_audit}")
     m1, m2, m3, m4 = st.columns(4)
@@ -286,7 +705,6 @@ with tab4:
     m4.metric("Nivel Fibonacci", fibo_audit["fibo_estado"])
     st.info(f"💡 **Nota Táctica:** {fibo_audit['fibo_mensaje']}")
 
-# --- TAB 5: ANALIZADOR QUIRÚRGICO ELITE ---
 with tab5:
   st.header(
       "🎯 Analizador Quirúrgico Elite - Alertas de Francotirador, Elo"
@@ -306,13 +724,10 @@ with tab5:
 
   stats_l_base = datos_liga["tabla"][p_local]
   stats_v_base = datos_liga["tabla"][p_visita]
-
   fibo_l = calcular_fibonacci_y_tendencia(stats_l_base, p_local)
   fibo_v = calcular_fibonacci_y_tendencia(stats_v_base, p_visita)
-
   elo_l = calcular_elo_snapshot(stats_l_base)
   elo_v = calcular_elo_snapshot(stats_v_base)
-
   racha_l_txt, mult_l = analizar_racha_automatica(
       datos_liga["historial"], p_local
   )
@@ -345,7 +760,6 @@ with tab5:
           value=2,
           key="h2h_dir_wv",
       )
-
     col_g1, col_g2 = st.columns(2)
     with col_g1:
       h2h_goles_l = st.number_input(
@@ -374,7 +788,6 @@ with tab5:
     h2h_5_goles_v_list = []
     defaults_l = [1, 2, 0, 1, 2]
     defaults_v = [1, 1, 0, 0, 2]
-
     for i in range(5):
       col_fila_1, col_fila_2, col_fila_3 = st.columns([2, 2, 3])
       with col_fila_1:
@@ -400,7 +813,6 @@ with tab5:
             f" #{i+1}: {int(gl_partido)} - {int(gv_partido)}</div>",
             unsafe_allow_html=True,
         )
-
       h2h_5_goles_l_list.append(float(gl_partido))
       h2h_5_goles_v_list.append(float(gv_partido))
 
@@ -427,10 +839,8 @@ with tab5:
 
         base_lambda_local = (gf_l_prom + gc_v_prom) / 2
         base_lambda_visita = (gf_v_prom + gc_l_prom) / 2
-
         h2h_10_l = h2h_goles_l / 10.0
         h2h_10_v = h2h_goles_v / 10.0
-
         n_partidos_h2h5 = max(1, len(h2h_5_goles_l_list))
         h2h_5_l = sum(h2h_5_goles_l_list) / n_partidos_h2h5
         h2h_5_v = sum(h2h_5_goles_v_list) / n_partidos_h2h5
@@ -511,7 +921,6 @@ with tab5:
           pd.DataFrame(top_marcadores), use_container_width=True, hide_index=True
       )
 
-# --- TAB 6: ANALIZADOR UNIVERSAL ---
 with tab6:
   st.header("🌍 Analizador Universal")
   col_n1, col_n2 = st.columns(2)
@@ -519,7 +928,6 @@ with tab6:
     u_local = st.text_input("Local", value="Equipo Local", key="un_l")
   with col_n2:
     u_visita = st.text_input("Visitante", value="Equipo Visitante", key="un_v")
-
   st.info(
       "Introduce los datos generales en esta sección para realizar un cálculo"
       " rápido."
@@ -527,21 +935,18 @@ with tab6:
   if st.button("🚀 Ejecutar Simulación Universal", type="primary"):
     st.success("¡Simulación universal completada con éxito!")
 
-# --- TAB 7: GRÁFICOS MACD & RSI (TRADING TÁCTICO) ---
 with tab7:
   st.header(f"📈 Gráficos de Trading Táctico (MACD & RSI) - {liga_sel}")
   st.info(
       "Visualiza el impulso de racha (MACD) y el termómetro de sobrecompra o"
       " suelo (RSI) de cualquier equipo."
   )
-
   equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
   eq_trading = st.selectbox(
       "Seleccionar Equipo para Gráficos:",
       equipos_disponibles,
       key="eq_trading_sel",
   )
-
   if eq_trading:
     st.markdown("---")
     st.subheader(f"📊 Análisis Gráfico Cuantitativo: {eq_trading}")
