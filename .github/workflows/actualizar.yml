@@ -1,4 +1,4 @@
-name: Actualizar Pronósticos Diario
+name: Actualizar Pronosticos Diario
 
 on:
   schedule:
@@ -11,27 +11,23 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Clonar repositorio
-        uses: actions/checkout@v3
-
-      - name: Configurar Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v3
+      
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-
-      - name: Instalar librerías
+          
+      - name: Instalar dependencias
         run: pip install requests
-
-      - name: Ejecutar actualización desde ESPN
+        
+      - name: Ejecutar script de ESPN
         run: python actualizar_datos.py
-
-      - name: Guardar cambios automáticamente
+        
+      - name: Guardar y subir cambios
         run: |
-          git config --global user.name "Bot Automático"
+          git config --global user.name "Bot Automatico"
           git config --global user.email "bot@actions.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git status
           git add -A
-          git commit -m "Actualización automática de resultados [skip ci]" || echo "Sin cambios"
+          git commit -m "Actualizacion automatica [skip ci]" || echo "Sin cambios"
           git push origin principal
-permissions: 
