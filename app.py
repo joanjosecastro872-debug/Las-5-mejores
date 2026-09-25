@@ -10,8 +10,8 @@ import streamlit as st
 
 DB_FILE = "zohan_pronostic_db.json"
 
-# COLOCA AQUÍ TU API KEY OBTENIDA DEL DASHBOARD DE API-FOOTBALL
-API_KEY_SPORTS = "TU_API_KEY_AQUI"
+# API Key autenticada de API-Sports
+API_KEY_SPORTS = "f11894da9eee63c9155fa66609a73187"
 
 # Mapeo de ligas con los IDs oficiales de API-Sports
 LEAGUES_API_IDS = {
@@ -23,20 +23,20 @@ LEAGUES_API_IDS = {
     "🇫🇷 Ligue 1": 61,
 }
 
-# Encabezado exclusivo exigido por API-Sports (dashboard.api-football.com)
+# Encabezado exigido por API-Sports
 HEADERS_API_SPORTS = {
     "x-apisports-key": API_KEY_SPORTS,
 }
 
 
 def realizar_peticion_api_sports(league_id, season=2026):
-  """Consulta directamente las posiciones a API-Sports."""
+  """Consulta las posiciones a API-Sports probando la temporada actual o previa."""
   url = f"https://v3.football.api-sports.io/standings?league={league_id}&season={season}"
   try:
     response = requests.get(url, headers=HEADERS_API_SPORTS, timeout=10)
     if response.status_code == 200:
       data = response.json()
-      # Si la temporada 2026 aún no tiene datos cargados en alguna liga, intenta con 2025
+      # Si la temporada 2026 aún no tiene partidos cargados en la API, intenta con 2025
       if not data.get("response"):
         url_prev = f"https://v3.football.api-sports.io/standings?league={league_id}&season={season-1}"
         res_prev = requests.get(
@@ -80,7 +80,7 @@ def obtener_estructura_equipo():
 
 
 def sincronizar_con_api_sports(db_data):
-  """Lee la tabla oficial desde API-Sports y la sincroniza en tu JSON."""
+  """Sincroniza la base de datos local con la tabla oficial de API-Sports."""
   hubo_actualizacion = False
 
   for liga_nombre, league_id in LEAGUES_API_IDS.items():
@@ -197,19 +197,17 @@ datos_liga = db[liga_sel]
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚡ Sincronización API-Sports")
 if st.sidebar.button("🔄 Actualizar Tabla desde API-Sports", type="primary"):
-  if API_KEY_SPORTS == "TU_API_KEY_AQUI":
-    st.sidebar.error("⚠️ Debes colocar tu API Key real en la variable API_KEY_SPORTS.")
-  else:
-    with st.spinner("Conectando con API-Sports..."):
-      db, exito = sincronizar_con_api_sports(db)
-      if exito:
-        guardar_base_datos(db)
-        st.sidebar.success("¡Tabla vinculada y actualizada con éxito!")
-        st.rerun()
-      else:
-        st.sidebar.error(
-            "No se pudieron obtener datos. Verifica tu API Key o cuota diaria."
-        )
+  with st.spinner("Conectando con API-Sports..."):
+    db, exito = sincronizar_con_api_sports(db)
+    if exito:
+      guardar_base_datos(db)
+      st.sidebar.success("¡Tabla vinculada y actualizada con éxito!")
+      st.rerun()
+    else:
+      st.sidebar.error(
+          "No se pudieron obtener datos. Verifica la conexión o la cuota"
+          " diaria."
+      )
 
 # Interfaz Principal
 st.header(f"Tabla de Posiciones y Jerarquía Elo - {liga_sel}")
