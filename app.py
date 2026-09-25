@@ -30,28 +30,21 @@ HEADERS_API_SPORTS = {
 
 
 def realizar_peticion_api_sports(league_id):
-  """Consulta la tabla de posiciones de la temporada actual en API-Sports."""
-  # En API-Sports, las ligas europeas actuales se consultan con el año de inicio de temporada (2025/2026 -> 2025)
-  season_actual = 2025
-  url = f"https://v3.football.api-sports.io/standings?league={league_id}&season={season_actual}"
+  """Consulta la temporada 2024 permitida en el plan gratuito para validar la vinculación."""
+  season_prueba = 2024
+  url = f"https://v3.football.api-sports.io/standings?league={league_id}&season={season_prueba}"
 
   try:
     response = requests.get(url, headers=HEADERS_API_SPORTS, timeout=10)
     if response.status_code == 200:
       data = response.json()
 
-      # Captura si API-Sports reporta errores (ej: cuota agotada o credenciales)
       if data.get("errors") and len(data["errors"]) > 0:
         st.sidebar.error(f"⚠️ Aviso API-Sports: {data['errors']}")
         return None
 
       if data.get("response") and len(data["response"]) > 0:
         return data
-      else:
-        st.sidebar.warning(
-            f"No se encontraron datos para la liga ID {league_id} en la"
-            f" temporada {season_actual}."
-        )
 
   except Exception as e:
     st.sidebar.error(f"Error de conexión de red: {e}")
@@ -90,7 +83,7 @@ def obtener_estructura_equipo():
 
 
 def sincronizar_con_api_sports(db_data):
-  """Sincroniza la base de datos local procesando las respuestas oficiales de API-Sports."""
+  """Sincroniza la base de datos local procesando las respuestas de API-Sports."""
   hubo_actualizacion = False
 
   for liga_nombre, league_id in LEAGUES_API_IDS.items():
@@ -417,7 +410,7 @@ def generar_grafico_macd_y_rsi(historial, equipo, stats_eq=None):
 
 # Configuración e Interfaz Principal
 st.set_page_config(
-    page_title="Zohan Pronostic v8.0 - API-Sports",
+    page_title="Zohan Pronostic v8.0 - API-Sports (Prueba)",
     page_icon="⚽",
     layout="wide",
 )
@@ -453,14 +446,14 @@ datos_liga = db[liga_sel]
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚡ Sincronización API-Sports")
 if st.sidebar.button("🔄 Actualizar Tabla desde API-Sports", type="primary"):
-  with st.spinner("Conectando con API-Sports..."):
+  with st.spinner("Conectando con API-Sports (Prueba 2024)..."):
     db, exito = sincronizar_con_api_sports(db)
     if exito:
       guardar_base_datos(db)
       st.sidebar.success("¡Tabla vinculada y actualizada con éxito!")
       st.rerun()
     else:
-      st.sidebar.error("No se obtuvieron datos. Revisa las alertas arriba.")
+      st.sidebar.error("No se obtuvieron datos. Revisa la barra lateral.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📱 Gestión de Archivo .TXT")
