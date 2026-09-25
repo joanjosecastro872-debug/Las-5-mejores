@@ -1,0 +1,34 @@
+name: Actualizar Pronósticos Diario
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # Se ejecuta todos los días a las 6:00 AM de forma automática
+  workflow_dispatch: # Te permite forzarlo manualmente con un botón cuando quieras
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Permiso obligatorio para que el robot guarde los cambios en tu base de datos
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Instalar librerías
+        run: pip install requests
+
+      - name: Ejecutar actualización desde ESPN
+        run: python actualizar_datos.py
+
+      - name: Guardar cambios automáticamente en el repositorio
+        run: |
+          git config --global user.name "Bot Automático"
+          git config --global user.email "bot@actions.com"
+          git add zohan_pronostic_db.json
+          git commit -m "Actualización automática de resultados [skip ci]" || echo "Sin cambios"
+          git push
