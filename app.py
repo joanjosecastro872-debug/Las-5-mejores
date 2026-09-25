@@ -946,4 +946,3 @@ with tab7:
       generar_grafico_macd_y_rsi(
           datos_liga["historial"], eq_trading, datos_liga["tabla"][eq_trading]
       )
-á
