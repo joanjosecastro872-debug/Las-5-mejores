@@ -15,31 +15,40 @@ LEAGUES_ESPN = {
 
 
 def actualizar_desde_espn():
+  print(f"Buscando archivo de base de datos en: {os.path.abspath(DB_FILE)}")
   if not os.path.exists(DB_FILE):
-    print("No se encontró la base de datos local.")
+    print("❌ ERROR: No se encontró la base de datos local en esta ruta.")
     return
 
   with open(DB_FILE, "r", encoding="utf-8") as f:
     db = json.load(f)
+  print("✅ Base de datos local cargada correctamente.")
+
+  cambios_realizados = False
 
   for liga_nombre, slug in LEAGUES_ESPN.items():
     if liga_nombre not in db:
+      print(f"⚠️ La liga {liga_nombre} no está en el JSON.")
       continue
 
     url = f"https://site.api.espn.com/apis/v2/sports/soccer/{slug}/standings"
     try:
+      print(f"Consultando API de ESPN para {liga_nombre}...")
       response = requests.get(url, timeout=10)
       if response.status_code != 200:
+        print(f"❌ Error HTTP {response.status_code} para {liga_nombre}")
         continue
       data = response.json()
 
       standings = data.get("standings", [])
       if not standings:
+        print(f"⚠️ No se encontraron 'standings' para {liga_nombre}")
         continue
 
       entries = standings[0].get("entries", [])
       tabla_liga = db[liga_nombre]["tabla"]
 
+      actualizados_liga = 0
       for entry in entries:
         team_name_espn = entry.get("team", {}).get("displayName", "")
         stats = {
@@ -72,13 +81,23 @@ def actualizar_desde_espn():
                 "DG": dg,
                 "Pts": pts,
             })
+            actualizados_liga += 1
+            cambios_realizados = True
             break
-    except Exception as e:
-      print(f"Error actualizando {liga_nombre}: {e}")
+            
+      print(f"📊 {liga_nombre}: Se actualizaron {actualizados_liga} equipos.")
 
-  with open(DB_FILE, "w", encoding="utf-8") as f:
-    json.dump(db, f, ensure_ascii=False, indent=4)
-  print("¡Base de datos sincronizada con éxito!")
+    except Exception as e:
+      print(f"❌ Excepción actualizando {liga_nombre}: {e}")
+
+  if cambios_realizados:
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+      json.dump(db, f, ensure_ascii=False, indent=4)
+    print("💾 ¡Base de datos modificada y guardada con éxito!")
+  else:
+    print("⚠️ ADVERTENCIA: No se realizaron cambios porque ningún equipo coincidió o la API no devolvió datos nuevos.")
+
+  print("¡Proceso de sincronización finalizado!")
 
 
 if __name__ == "__main__":
