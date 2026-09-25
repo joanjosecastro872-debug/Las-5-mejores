@@ -30,6 +30,8 @@ jobs:
           git config --global user.name "Bot Automático"
           git config --global user.email "bot@actions.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git add zohan_pronostic_db.json
+          git status
+          git add -A
           git commit -m "Actualización automática de resultados [skip ci]" || echo "Sin cambios"
           git push origin principal
+permissions: 
