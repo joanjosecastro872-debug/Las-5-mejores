@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import requests
 from scipy.stats import poisson
 import streamlit as st
 
@@ -143,6 +144,34 @@ LIGAS_EQUIPOS = {
     ],
 }
 
+LEAGUES_ESPN_SLUGS = {
+    "🇪🇸 LaLiga": "esp.1",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "eng.1",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": "eng.2",
+    "🇮🇹 Serie A": "ita.1",
+    "🇩🇪 Bundesliga": "ger.1",
+    "🇫🇷 Ligue 1": "fra.1",
+}
+
+EQUIVALENCIAS_ESPN = {
+    "🇩🇪 Bundesliga": {
+        "1. FC Köln": "1. FC Colonia",
+        "Union Berlin": "1. FC Union Berlin",
+        "Mainz": "1. FSV Mainz 05",
+        "Freiburg": "SC Friburgo",
+        "Werder Bremen": "SV Werder Bremen",
+        "Bayern Munich": "Bayern Múnich",
+    },
+    "🇫🇷 Ligue 1": {
+        "Monaco": "AS Mónaco",
+        "Nice": "OGC Niza",
+        "Lyon": "Olympique de Lyon",
+        "Marseille": "Olympique de Marsella",
+        "Strasbourg": "RC Estrasburgo",
+        "Rennes": "Stade Rennais",
+    },
+}
+
 
 def obtener_estructura_equipo():
   return {
@@ -178,6 +207,78 @@ def inicializar_liga_vacia(equipos):
   for eq in equipos:
     tabla[eq] = obtener_estructura_equipo()
   return {"tabla": tabla, "historial": []}
+
+
+def sincronizar_con_espn(db_data):
+  """Consulta directamente a la API de ESPN para actualizar puntos, partidos y
+
+  goles, respetando el historial y los nombres personalizados.
+  """
+  for liga_nombre, slug in LEAGUES_ESPN_SLUGS.items():
+    url = f"https://site.api.espn.com/apis/v2/sports/soccer/{slug}/standings"
+    try:
+      response = requests.get(url, timeout=8)
+      if response.status_code != 200:
+        continue
+      data_espn = response.json()
+      standings = data_espn.get("standings", [])
+      if not standings:
+        continue
+      entries = standings[0].get("entries", [])
+
+      if liga_nombre not in db_data:
+        db_data[liga_nombre] = {"tabla": {}, "historial": []}
+
+      tabla_liga = db_data[liga_nombre]["tabla"]
+      aliases = EQUIVALENCIAS_ESPN.get(liga_nombre, {})
+
+      for entry in entries:
+        team_name_espn = entry.get("team", {}).get("displayName", "")
+        stats = {
+            s.get("name"): s.get("value")
+            for s in entry.get("stats", [])
+            if "name" in s
+        }
+
+        pj = int(stats.get("gamesPlayed", 0))
+        pg = int(stats.get("wins", 0))
+        pe = int(stats.get("ties", 0))
+        pp = int(stats.get("losses", 0))
+        gf = int(stats.get("pointsFor", 0))
+        gc = int(stats.get("pointsAgainst", 0))
+        dg = int(stats.get("pointDifferential", gf - gc))
+        pts = int(stats.get("points", 0))
+
+        eq_encontrado = None
+        if team_name_espn in aliases:
+          eq_encontrado = aliases[team_name_espn]
+        else:
+          for eq_key in tabla_liga.keys():
+            if (
+                eq_key.lower() in team_name_espn.lower()
+                or team_name_espn.lower() in eq_key.lower()
+            ):
+              eq_encontrado = eq_key
+              break
+          if not eq_encontrado:
+            eq_encontrado = team_name_espn
+
+        if eq_encontrado not in tabla_liga:
+          tabla_liga[eq_encontrado] = obtener_estructura_equipo()
+
+        tabla_liga[eq_encontrado].update({
+            "PJ": pj,
+            "PG": pg,
+            "PE": pe,
+            "PP": pp,
+            "GF": gf,
+            "GC": gc,
+            "DG": dg,
+            "Pts": pts,
+        })
+    except Exception:
+      pass
+  return db_data
 
 
 def cargar_base_datos():
@@ -370,7 +471,6 @@ def generar_grafico_macd_y_rsi(historial, equipo, stats_eq=None):
       pts = 3 if gf > gc else (1 if gf == gc else 0)
       puntos_partidos.append(pts)
 
-  # Si faltan partidos en el historial, extraemos el rendimiento directamente de la tabla de posiciones
   if len(puntos_partidos) < 4 and stats_eq and stats_eq.get("PJ", 0) > 0:
     pg = stats_eq.get("PG", 0)
     pe = stats_eq.get("PE", 0)
@@ -480,6 +580,15 @@ liga_sel = st.sidebar.selectbox(
     "⚽ Seleccionar Liga", list(LIGAS_EQUIPOS.keys()), key="select_liga_main"
 )
 datos_liga = db[liga_sel]
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚡ Sincronización Automática")
+if st.sidebar.button("🔄 Actualizar Tabla desde ESPN", type="primary"):
+  with st.spinner("Conectando con ESPN..."):
+    db = sincronizar_con_espn(db)
+    guardar_base_datos(db)
+    st.sidebar.success("¡Datos actualizados desde ESPN con éxito!")
+    st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📱 Gestión de Archivo .TXT")
