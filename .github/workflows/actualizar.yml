@@ -30,4 +30,4 @@ jobs:
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git add -A
           git commit -m "Actualizacion automatica [skip ci]" || echo "Sin cambios"
-          git push origin principal
+          git push origin HEAD
