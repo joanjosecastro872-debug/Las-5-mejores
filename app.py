@@ -29,64 +29,35 @@ HEADERS_FOOTBALL_DATA = {
 
 
 def realizar_peticion_football_data(league_code):
-  """Consulta la tabla de posiciones oficial de la temporada actual en Football-Data.org."""
-  url = f"https://api.football-data.org/v4/competitions/{league_code}/standings"
+  """Consulta la tabla oficial de Football-Data.org especificando la temporada activa."""
+  # En Football-Data.org las temporadas europeas en curso se consultan con el año de inicio (2025)
+  url = f"https://api.football-data.org/v4/competitions/{league_code}/standings?season=2025"
 
   try:
     response = requests.get(url, headers=HEADERS_FOOTBALL_DATA, timeout=10)
     if response.status_code == 200:
       return response.json()
-    elif response.status_code == 403:
-      st.sidebar.error("⚠️ Token no válido o restringido.")
-      return None
-    elif response.status_code == 429:
-      st.sidebar.error("⚠️ Límite de peticiones excedido (Máx 10 por minuto).")
-      return None
     else:
-      st.sidebar.error(f"Error HTTP {response.status_code} desde la API.")
+      # Muestra el detalle exacto del error que devuelve la API para diagnóstico
+      try:
+        err_msg = response.json().get("message", response.text)
+      except Exception:
+        err_msg = response.text
+      st.sidebar.error(f"Error {response.status_code} [{league_code}]: {err_msg}")
       return None
   except Exception as e:
     st.sidebar.error(f"Error de conexión de red: {e}")
     return None
 
 
-def obtener_estructura_equipo():
-  return {
-      "PJ": 0,
-      "PG": 0,
-      "PE": 0,
-      "PP": 0,
-      "GF": 0,
-      "GC": 0,
-      "DG": 0,
-      "Pts": 0,
-      "PJ_L": 0,
-      "PG_L": 0,
-      "PE_L": 0,
-      "PP_L": 0,
-      "GF_L": 0,
-      "GC_L": 0,
-      "DG_L": 0,
-      "Pts_L": 0,
-      "PJ_V": 0,
-      "PG_V": 0,
-      "PE_V": 0,
-      "PP_V": 0,
-      "GF_V": 0,
-      "GC_V": 0,
-      "DG_V": 0,
-      "Pts_V": 0,
-  }
-
-
 def sincronizar_con_football_data(db_data):
-  """Sincroniza la base de datos procesando la tabla actual de Football-Data.org."""
+  """Sincroniza la base de datos procesando la respuesta oficial."""
   hubo_actualizacion = False
 
   for liga_nombre, league_code in LEAGUES_FOOTBALL_DATA.items():
     data_api = realizar_peticion_football_data(league_code)
 
-    if not data_api or "standings" not in data_api:
+    if not data_api or "standings" not in data_api or not data_api["standings"]:
       continue
 
     try:
@@ -111,7 +82,7 @@ def sincronizar_con_football_data(db_data):
       dg = item["goalDifference"]
       pts = item["points"]
 
-      # Desglose proporcional de métricas local/visitante
+      # Métricas proporcionales para el desglose Local/Visitante
       pj_l = max(1, pj // 2)
       pg_l, pe_l, pp_l = pg // 2, pe // 2, pp // 2
       gf_l, gc_l = gf // 2, gc // 2
@@ -151,10 +122,10 @@ def sincronizar_con_football_data(db_data):
       db_data[liga_nombre]["tabla"] = tabla_liga
       hubo_actualizacion = True
 
-    # Intervalo de cortesía para respetar el límite del nivel gratuito
     time.sleep(1)
 
   return db_data, hubo_actualizacion
+
 
 
 def cargar_base_datos():
