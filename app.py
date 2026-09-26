@@ -10,47 +10,44 @@ import streamlit as st
 
 DB_FILE = "zohan_pronostic_db.json"
 
-# API Key autenticada de API-Sports
-API_KEY_SPORTS = "f11894da9eee63c9155fa66609a73187"
+# Token autenticado de Football-Data.org
+FOOTBALL_DATA_TOKEN = "9c49e385dc2044439975c26190b17ed9"
 
-# Mapeo de ligas con los IDs oficiales de API-Sports
-LEAGUES_API_IDS = {
-    "🇪🇸 LaLiga": 140,
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": 39,
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": 40,
-    "🇮🇹 Serie A": 135,
-    "🇩🇪 Bundesliga": 78,
-    "🇫🇷 Ligue 1": 61,
+# Mapeo de ligas con códigos oficiales de Football-Data.org (Temporada actual gratuita)
+LEAGUES_FOOTBALL_DATA = {
+    "🇪🇸 LaLiga": "PD",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "PL",
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Championship": "ELC",
+    "🇮🇹 Serie A": "SA",
+    "🇩🇪 Bundesliga": "BL1",
+    "🇫🇷 Ligue 1": "FL1",
 }
 
-# Encabezado exigido por API-Sports
-HEADERS_API_SPORTS = {
-    "x-apisports-key": API_KEY_SPORTS,
+HEADERS_FOOTBALL_DATA = {
+    "X-Auth-Token": FOOTBALL_DATA_TOKEN,
 }
 
 
-def realizar_peticion_api_sports(league_id):
-  """Consulta la temporada 2024 permitida en el plan gratuito para validar la vinculación."""
-  season_prueba = 2024
-  url = f"https://v3.football.api-sports.io/standings?league={league_id}&season={season_prueba}"
+def realizar_peticion_football_data(league_code):
+  """Consulta la tabla de posiciones oficial de la temporada actual en Football-Data.org."""
+  url = f"https://api.football-data.org/v4/competitions/{league_code}/standings"
 
   try:
-    response = requests.get(url, headers=HEADERS_API_SPORTS, timeout=10)
+    response = requests.get(url, headers=HEADERS_FOOTBALL_DATA, timeout=10)
     if response.status_code == 200:
-      data = response.json()
-
-      if data.get("errors") and len(data["errors"]) > 0:
-        st.sidebar.error(f"⚠️ Aviso API-Sports: {data['errors']}")
-        return None
-
-      if data.get("response") and len(data["response"]) > 0:
-        return data
-
+      return response.json()
+    elif response.status_code == 403:
+      st.sidebar.error("⚠️ Token no válido o restringido.")
+      return None
+    elif response.status_code == 429:
+      st.sidebar.error("⚠️ Límite de peticiones excedido (Máx 10 por minuto).")
+      return None
+    else:
+      st.sidebar.error(f"Error HTTP {response.status_code} desde la API.")
+      return None
   except Exception as e:
     st.sidebar.error(f"Error de conexión de red: {e}")
     return None
-
-  return None
 
 
 def obtener_estructura_equipo():
@@ -82,18 +79,18 @@ def obtener_estructura_equipo():
   }
 
 
-def sincronizar_con_api_sports(db_data):
-  """Sincroniza la base de datos local procesando las respuestas de API-Sports."""
+def sincronizar_con_football_data(db_data):
+  """Sincroniza la base de datos procesando la tabla actual de Football-Data.org."""
   hubo_actualizacion = False
 
-  for liga_nombre, league_id in LEAGUES_API_IDS.items():
-    data_api = realizar_peticion_api_sports(league_id)
+  for liga_nombre, league_code in LEAGUES_FOOTBALL_DATA.items():
+    data_api = realizar_peticion_football_data(league_code)
 
-    if not data_api or not data_api.get("response"):
+    if not data_api or "standings" not in data_api:
       continue
 
     try:
-      standings_list = data_api["response"][0]["league"]["standings"][0]
+      standings_total = data_api["standings"][0]["table"]
     except (KeyError, IndexError):
       continue
 
@@ -102,43 +99,60 @@ def sincronizar_con_api_sports(db_data):
 
     tabla_liga = {}
 
-    for item in standings_list:
+    for item in standings_total:
       team_name = item["team"]["name"]
 
-      all_s = item["all"]
-      home_s = item["home"]
-      away_s = item["away"]
+      pj = item["playedGames"]
+      pg = item["won"]
+      pe = item["draw"]
+      pp = item["lost"]
+      gf = item["goalsFor"]
+      gc = item["goalsAgainst"]
+      dg = item["goalDifference"]
+      pts = item["points"]
+
+      # Desglose proporcional de métricas local/visitante
+      pj_l = max(1, pj // 2)
+      pg_l, pe_l, pp_l = pg // 2, pe // 2, pp // 2
+      gf_l, gc_l = gf // 2, gc // 2
+
+      pj_v = max(1, pj - pj_l)
+      pg_v, pe_v, pp_v = pg - pg_l, pe - pe_l, pp - pp_l
+      gf_v, gc_v = gf - gf_l, gc - gc_l
 
       tabla_liga[team_name] = {
-          "PJ": all_s["played"],
-          "PG": all_s["win"],
-          "PE": all_s["draw"],
-          "PP": all_s["lose"],
-          "GF": all_s["goals"]["for"],
-          "GC": all_s["goals"]["against"],
-          "DG": item["goalsDiff"],
-          "Pts": item["points"],
-          "PJ_L": home_s["played"],
-          "PG_L": home_s["win"],
-          "PE_L": home_s["draw"],
-          "PP_L": home_s["lose"],
-          "GF_L": home_s["goals"]["for"],
-          "GC_L": home_s["goals"]["against"],
-          "DG_L": home_s["goals"]["for"] - home_s["goals"]["against"],
-          "Pts_L": home_s["win"] * 3 + home_s["draw"],
-          "PJ_V": away_s["played"],
-          "PG_V": away_s["win"],
-          "PE_V": away_s["draw"],
-          "PP_V": away_s["lose"],
-          "GF_V": away_s["goals"]["for"],
-          "GC_V": away_s["goals"]["against"],
-          "DG_V": away_s["goals"]["for"] - away_s["goals"]["against"],
-          "Pts_V": away_s["win"] * 3 + away_s["draw"],
+          "PJ": pj,
+          "PG": pg,
+          "PE": pe,
+          "PP": pp,
+          "GF": gf,
+          "GC": gc,
+          "DG": dg,
+          "Pts": pts,
+          "PJ_L": pj_l,
+          "PG_L": pg_l,
+          "PE_L": pe_l,
+          "PP_L": pp_l,
+          "GF_L": gf_l,
+          "GC_L": gc_l,
+          "DG_L": gf_l - gc_l,
+          "Pts_L": pg_l * 3 + pe_l,
+          "PJ_V": pj_v,
+          "PG_V": pg_v,
+          "PE_V": pe_v,
+          "PP_V": pp_v,
+          "GF_V": gf_v,
+          "GC_V": gc_v,
+          "DG_V": gf_v - gc_v,
+          "Pts_V": pg_v * 3 + pe_v,
       }
 
     if tabla_liga:
       db_data[liga_nombre]["tabla"] = tabla_liga
       hubo_actualizacion = True
+
+    # Intervalo de cortesía para respetar el límite del nivel gratuito
+    time.sleep(1)
 
   return db_data, hubo_actualizacion
 
@@ -154,7 +168,7 @@ def cargar_base_datos():
 
   estructura_base = obtener_estructura_equipo()
 
-  for liga in LEAGUES_API_IDS.keys():
+  for liga in LEAGUES_FOOTBALL_DATA.keys():
     if liga not in data or not isinstance(data[liga], dict):
       data[liga] = {"tabla": {}, "historial": []}
 
@@ -410,7 +424,7 @@ def generar_grafico_macd_y_rsi(historial, equipo, stats_eq=None):
 
 # Configuración e Interfaz Principal
 st.set_page_config(
-    page_title="Zohan Pronostic v8.0 - API-Sports (Prueba)",
+    page_title="Zohan Pronostic v8.0 - Football-Data",
     page_icon="⚽",
     layout="wide",
 )
@@ -439,21 +453,23 @@ st.markdown(
 db = cargar_base_datos()
 
 liga_sel = st.sidebar.selectbox(
-    "⚽ Seleccionar Liga", list(LEAGUES_API_IDS.keys()), key="select_liga_main"
+    "⚽ Seleccionar Liga",
+    list(LEAGUES_FOOTBALL_DATA.keys()),
+    key="select_liga_main",
 )
 datos_liga = db[liga_sel]
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("⚡ Sincronización API-Sports")
-if st.sidebar.button("🔄 Actualizar Tabla desde API-Sports", type="primary"):
-  with st.spinner("Conectando con API-Sports (Prueba 2024)..."):
-    db, exito = sincronizar_con_api_sports(db)
+st.sidebar.subheader("⚡ Sincronización Football-Data")
+if st.sidebar.button("🔄 Actualizar Tabla Actual", type="primary"):
+  with st.spinner("Descargando tablas oficiales de la temporada actual..."):
+    db, exito = sincronizar_con_football_data(db)
     if exito:
       guardar_base_datos(db)
-      st.sidebar.success("¡Tabla vinculada y actualizada con éxito!")
+      st.sidebar.success("¡Tabla de la temporada actual descargada!")
       st.rerun()
     else:
-      st.sidebar.error("No se obtuvieron datos. Revisa la barra lateral.")
+      st.sidebar.error("No se obtuvieron datos. Verifica la conexión.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📱 Gestión de Archivo .TXT")
@@ -493,8 +509,8 @@ with tab1:
   st.header(f"Tabla de Posiciones y Jerarquía Elo - {liga_sel}")
   if not datos_liga["tabla"]:
     st.warning(
-        "⚠️ No hay equipos cargados. Presiona **'🔄 Actualizar Tabla desde"
-        " API-Sports'** en la barra lateral."
+        "⚠️ No hay equipos cargados. Presiona **'🔄 Actualizar Tabla Actual'**"
+        " en la barra lateral."
     )
   else:
     if "vista_tabla" not in st.session_state:
@@ -569,7 +585,7 @@ with tab1:
 with tab2:
   st.header("⚙️ Carga Directa Avanzada por Equipo")
   if not datos_liga["tabla"]:
-    st.info("Sincroniza primero con API-Sports para ver los equipos.")
+    st.info("Sincroniza primero para ver los equipos.")
   else:
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     eq_target = st.selectbox(
@@ -632,7 +648,7 @@ with tab2:
 with tab3:
   st.header("Registrar Partido")
   if not datos_liga["tabla"]:
-    st.info("Sincroniza primero con API-Sports para ver los equipos.")
+    st.info("Sincroniza primero para ver los equipos.")
   else:
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     with st.form(key="form_match_sync"):
@@ -666,7 +682,7 @@ with tab3:
 with tab4:
   st.header("🔬 Auditoría Global")
   if not datos_liga["tabla"]:
-    st.info("Sincroniza primero con API-Sports para ver los equipos.")
+    st.info("Sincroniza primero para ver los equipos.")
   else:
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     eq_audit = st.selectbox(
@@ -690,7 +706,7 @@ with tab4:
 with tab5:
   st.header(f"🎯 Analizador Elite ({liga_sel})")
   if not datos_liga["tabla"]:
-    st.info("Sincroniza primero con API-Sports para ver los equipos.")
+    st.info("Sincroniza primero para ver los equipos.")
   else:
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     cp1, cp2 = st.columns(2)
@@ -763,7 +779,7 @@ with tab6:
 with tab7:
   st.header(f"📈 Gráficos Trading (MACD & RSI) - {liga_sel}")
   if not datos_liga["tabla"]:
-    st.info("Sincroniza primero con API-Sports para ver los equipos.")
+    st.info("Sincroniza primero para ver los equipos.")
   else:
     equipos_disponibles = sorted(list(datos_liga["tabla"].keys()))
     eq_trading = st.selectbox(
