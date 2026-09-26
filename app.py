@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -9,20 +10,24 @@ import streamlit as st
 
 DB_FILE = "zohan_pronostic_db.json"
 
-# Endpoints públicos y libres de OpenFootball (No requieren API Token ni registros)
-LEAGUES_OPEN_FOOTBALL = {
-    "🇪🇸 LaLiga": (
-        "https://raw.githubusercontent.com/openfootball/spanish-liga/master/2025-26/1-liga.json"
-    ),
-    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": (
-        "https://raw.githubusercontent.com/openfootball/england-football/master/2025-26/1-premierleague.json"
-    ),
-    "🇩🇪 Bundesliga": (
-        "https://raw.githubusercontent.com/openfootball/deutschland-bo3/master/2025-26/1-bundesliga.json"
-    ),
-    "🇮🇹 Serie A": (
-        "https://raw.githubusercontent.com/openfootball/italy-football/master/2025-26/1-seriea.json"
-    ),
+# Configuración de URLs de respaldo abiertas sin autenticación requerida
+OPEN_SOURCES = {
+    "🇪🇸 LaLiga": [
+        "https://raw.githubusercontent.com/openfootball/spanish-liga/master/2025-26/1-liga.json",
+        "https://raw.githubusercontent.com/openfootball/spanish-liga/master/2024-25/1-liga.json",
+    ],
+    "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": [
+        "https://raw.githubusercontent.com/openfootball/england-football/master/2025-26/1-premierleague.json",
+        "https://raw.githubusercontent.com/openfootball/england-football/master/2024-25/1-premierleague.json",
+    ],
+    "🇩🇪 Bundesliga": [
+        "https://raw.githubusercontent.com/openfootball/deutschland-bo3/master/2025-26/1-bundesliga.json",
+        "https://raw.githubusercontent.com/openfootball/deutschland-bo3/master/2024-25/1-bundesliga.json",
+    ],
+    "🇮🇹 Serie A": [
+        "https://raw.githubusercontent.com/openfootball/italy-football/master/2025-26/1-seriea.json",
+        "https://raw.githubusercontent.com/openfootball/italy-football/master/2024-25/1-seriea.json",
+    ],
 }
 
 
@@ -56,89 +61,96 @@ def obtener_estructura_equipo():
   }
 
 
-def sincronizar_con_openfootball(db_data):
-  """Descarga los partidos oficiales directamente desde repositorios públicos abiertos."""
+def sincronizar_con_fuentes_abiertas(db_data):
+  """Intenta descargar los datos desde múltiples URLs de respaldo automáticas."""
   hubo_actualizacion = False
 
-  for liga_nombre, url_json in LEAGUES_OPEN_FOOTBALL.items():
-    try:
-      response = requests.get(url_json, timeout=10)
-      if response.status_code != 200:
+  for liga_nombre, urls in OPEN_SOURCES.items():
+    data_exito = None
+
+    for url in urls:
+      try:
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+          data_exito = res.json()
+          break
+      except Exception:
         continue
 
-      data = response.json()
-      rounds = data.get("rounds", [])
+    if not data_exito:
+      st.sidebar.warning(
+          f"⚠️ No se pudo conectar a los servidores de {liga_nombre}."
+      )
+      continue
 
-      tabla_liga = {}
+    rounds = data_exito.get("rounds", [])
+    tabla_liga = {}
 
-      for r in rounds:
-        matches = r.get("matches", [])
-        for m in matches:
-          score = m.get("score")
-          if not score or "ft" not in score:
-            continue
+    for r in rounds:
+      matches = r.get("matches", [])
+      for m in matches:
+        score = m.get("score")
+        if not score or "ft" not in score:
+          continue
 
-          team1 = m.get("team1")
-          team2 = m.get("team2")
-          gl, gv = score["ft"][0], score["ft"][1]
+        team1 = m.get("team1")
+        team2 = m.get("team2")
+        gl, gv = score["ft"][0], score["ft"][1]
 
-          for eq in [team1, team2]:
-            if eq not in tabla_liga:
-              tabla_liga[eq] = obtener_estructura_equipo()
+        for eq in [team1, team2]:
+          if eq not in tabla_liga:
+            tabla_liga[eq] = obtener_estructura_equipo()
 
-          # Actualización Local
-          tabla_liga[team1]["PJ"] += 1
-          tabla_liga[team1]["PJ_L"] += 1
-          tabla_liga[team1]["GF"] += gl
-          tabla_liga[team1]["GC"] += gv
-          tabla_liga[team1]["GF_L"] += gl
-          tabla_liga[team1]["GC_L"] += gv
+        # Actualización Local
+        tabla_liga[team1]["PJ"] += 1
+        tabla_liga[team1]["PJ_L"] += 1
+        tabla_liga[team1]["GF"] += gl
+        tabla_liga[team1]["GC"] += gv
+        tabla_liga[team1]["GF_L"] += gl
+        tabla_liga[team1]["GC_L"] += gv
 
-          # Actualización Visitante
-          tabla_liga[team2]["PJ"] += 1
-          tabla_liga[team2]["PJ_V"] += 1
-          tabla_liga[team2]["GF"] += gv
-          tabla_liga[team2]["GC"] += gl
-          tabla_liga[team2]["GF_V"] += gv
-          tabla_liga[team2]["GC_V"] += gl
+        # Actualización Visitante
+        tabla_liga[team2]["PJ"] += 1
+        tabla_liga[team2]["PJ_V"] += 1
+        tabla_liga[team2]["GF"] += gv
+        tabla_liga[team2]["GC"] += gl
+        tabla_liga[team2]["GF_V"] += gv
+        tabla_liga[team2]["GC_V"] += gl
 
-          if gl > gv:
-            tabla_liga[team1]["PG"] += 1
-            tabla_liga[team1]["PG_L"] += 1
-            tabla_liga[team1]["Pts"] += 3
-            tabla_liga[team1]["Pts_L"] += 3
-            tabla_liga[team2]["PP"] += 1
-            tabla_liga[team2]["PP_V"] += 1
-          elif gl < gv:
-            tabla_liga[team2]["PG"] += 1
-            tabla_liga[team2]["PG_V"] += 1
-            tabla_liga[team2]["Pts"] += 3
-            tabla_liga[team2]["Pts_V"] += 3
-            tabla_liga[team1]["PP"] += 1
-            tabla_liga[team1]["PP_L"] += 1
-          else:
-            tabla_liga[team1]["PE"] += 1
-            tabla_liga[team1]["PE_L"] += 1
-            tabla_liga[team1]["Pts"] += 1
-            tabla_liga[team1]["Pts_L"] += 1
-            tabla_liga[team2]["PE"] += 1
-            tabla_liga[team2]["PE_V"] += 1
-            tabla_liga[team2]["Pts"] += 1
-            tabla_liga[team2]["Pts_V"] += 1
+        if gl > gv:
+          tabla_liga[team1]["PG"] += 1
+          tabla_liga[team1]["PG_L"] += 1
+          tabla_liga[team1]["Pts"] += 3
+          tabla_liga[team1]["Pts_L"] += 3
+          tabla_liga[team2]["PP"] += 1
+          tabla_liga[team2]["PP_V"] += 1
+        elif gl < gv:
+          tabla_liga[team2]["PG"] += 1
+          tabla_liga[team2]["PG_V"] += 1
+          tabla_liga[team2]["Pts"] += 3
+          tabla_liga[team2]["Pts_V"] += 3
+          tabla_liga[team1]["PP"] += 1
+          tabla_liga[team1]["PP_L"] += 1
+        else:
+          tabla_liga[team1]["PE"] += 1
+          tabla_liga[team1]["PE_L"] += 1
+          tabla_liga[team1]["Pts"] += 1
+          tabla_liga[team1]["Pts_L"] += 1
+          tabla_liga[team2]["PE"] += 1
+          tabla_liga[team2]["PE_V"] += 1
+          tabla_liga[team2]["Pts"] += 1
+          tabla_liga[team2]["Pts_V"] += 1
 
-      for eq, stats in tabla_liga.items():
-        stats["DG"] = stats["GF"] - stats["GC"]
-        stats["DG_L"] = stats["GF_L"] - stats["GC_L"]
-        stats["DG_V"] = stats["GF_V"] - stats["GC_V"]
+    for eq, stats in tabla_liga.items():
+      stats["DG"] = stats["GF"] - stats["GC"]
+      stats["DG_L"] = stats["GF_L"] - stats["GC_L"]
+      stats["DG_V"] = stats["GF_V"] - stats["GC_V"]
 
-      if tabla_liga:
-        if liga_nombre not in db_data:
-          db_data[liga_nombre] = {"tabla": {}, "historial": []}
-        db_data[liga_nombre]["tabla"] = tabla_liga
-        hubo_actualizacion = True
-
-    except Exception as e:
-      st.sidebar.error(f"Error procesando {liga_nombre}: {e}")
+    if tabla_liga:
+      if liga_nombre not in db_data:
+        db_data[liga_nombre] = {"tabla": {}, "historial": []}
+      db_data[liga_nombre]["tabla"] = tabla_liga
+      hubo_actualizacion = True
 
   return db_data, hubo_actualizacion
 
@@ -154,7 +166,7 @@ def cargar_base_datos():
 
   estructura_base = obtener_estructura_equipo()
 
-  for liga in LEAGUES_OPEN_FOOTBALL.keys():
+  for liga in OPEN_SOURCES.keys():
     if liga not in data or not isinstance(data[liga], dict):
       data[liga] = {"tabla": {}, "historial": []}
 
@@ -408,9 +420,11 @@ def generar_grafico_macd_y_rsi(historial, equipo, stats_eq=None):
   st.pyplot(fig)
 
 
-# Configuración e Interfaz Principal de Streamlit
+# Interfaz Principal
 st.set_page_config(
-    page_title="Zohan Pronostic v8.0 - Open Data", page_icon="⚽", layout="wide"
+    page_title="Zohan Pronostic v8.0 - Auto Respaldo",
+    page_icon="⚽",
+    layout="wide",
 )
 
 st.markdown(
@@ -437,23 +451,21 @@ st.markdown(
 db = cargar_base_datos()
 
 liga_sel = st.sidebar.selectbox(
-    "⚽ Seleccionar Liga",
-    list(LEAGUES_OPEN_FOOTBALL.keys()),
-    key="select_liga_main",
+    "⚽ Seleccionar Liga", list(OPEN_SOURCES.keys()), key="select_liga_main"
 )
 datos_liga = db[liga_sel]
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("⚡ Sincronización Abierta (Sin Token)")
+st.sidebar.subheader("⚡ Sincronización Automática Libre")
 if st.sidebar.button("🔄 Actualizar Tabla Actual", type="primary"):
-  with st.spinner("Descargando tablas oficiales en vivo..."):
-    db, exito = sincronizar_con_openfootball(db)
+  with st.spinner("Descargando posiciones desde los servidores de respaldo..."):
+    db, exito = sincronizar_con_fuentes_abiertas(db)
     if exito:
       guardar_base_datos(db)
-      st.sidebar.success("¡Tabla de la temporada actual descargada!")
+      st.sidebar.success("¡Base de datos actualizada con éxito!")
       st.rerun()
     else:
-      st.sidebar.error("No se obtuvieron datos. Revisa la conexión.")
+      st.sidebar.error("No se pudo obtener respuesta de ningún servidor.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📱 Gestión de Archivo .TXT")
@@ -479,7 +491,7 @@ if archivo_subido is not None:
   except Exception:
     st.sidebar.error("Archivo .txt inválido.")
 
-# Secciones de la Aplicación
+# Pestañas del Sistema
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Tabla & Elo",
     "⚙️ Carga Directa",
