@@ -10,8 +10,8 @@ import streamlit as st
 
 DB_FILE = "zohan_pronostic_db.json"
 
-# Token autenticado de Football-Data.org
-FOOTBALL_DATA_TOKEN = "9c49e385dc2044439975c26190b17ed9"
+# Token de Football-Data.org
+FOOTBALL_DATA_TOKEN = "9c49e385dc2044439975c26190b17ed9".strip()
 
 # Mapeo de ligas con códigos oficiales de Football-Data.org
 LEAGUES_FOOTBALL_DATA = {
@@ -21,10 +21,6 @@ LEAGUES_FOOTBALL_DATA = {
     "🇮🇹 Serie A": "SA",
     "🇩🇪 Bundesliga": "BL1",
     "🇫🇷 Ligue 1": "FL1",
-}
-
-HEADERS_FOOTBALL_DATA = {
-    "X-Auth-Token": FOOTBALL_DATA_TOKEN,
 }
 
 
@@ -59,11 +55,12 @@ def obtener_estructura_equipo():
 
 
 def realizar_peticion_football_data(league_code):
-  """Consulta la tabla de posiciones oficial de Football-Data.org."""
+  """Consulta las posiciones oficiales en Football-Data.org enviando el token verificado."""
   url = f"https://api.football-data.org/v4/competitions/{league_code}/standings"
+  headers = {"X-Auth-Token": FOOTBALL_DATA_TOKEN}
 
   try:
-    response = requests.get(url, headers=HEADERS_FOOTBALL_DATA, timeout=10)
+    response = requests.get(url, headers=headers, timeout=10)
     if response.status_code == 200:
       return response.json()
     else:
