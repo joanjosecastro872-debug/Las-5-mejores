@@ -1,6 +1,5 @@
 import json
 import os
-import time
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -10,23 +9,23 @@ import streamlit as st
 
 DB_FILE = "zohan_pronostic_db.json"
 
-# Configuración de URLs de respaldo abiertas sin autenticación requerida
+# Endpoints oficiales y estables de football.json (Sin registro, sin token)
 OPEN_SOURCES = {
     "🇪🇸 LaLiga": [
-        "https://raw.githubusercontent.com/openfootball/spanish-liga/master/2025-26/1-liga.json",
-        "https://raw.githubusercontent.com/openfootball/spanish-liga/master/2024-25/1-liga.json",
+        "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/es.1.json",
+        "https://raw.githubusercontent.com/openfootball/football.json/master/2025-26/es.1.json",
     ],
     "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": [
-        "https://raw.githubusercontent.com/openfootball/england-football/master/2025-26/1-premierleague.json",
-        "https://raw.githubusercontent.com/openfootball/england-football/master/2024-25/1-premierleague.json",
+        "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/en.1.json",
+        "https://raw.githubusercontent.com/openfootball/football.json/master/2025-26/en.1.json",
     ],
     "🇩🇪 Bundesliga": [
-        "https://raw.githubusercontent.com/openfootball/deutschland-bo3/master/2025-26/1-bundesliga.json",
-        "https://raw.githubusercontent.com/openfootball/deutschland-bo3/master/2024-25/1-bundesliga.json",
+        "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/de.1.json",
+        "https://raw.githubusercontent.com/openfootball/football.json/master/2025-26/de.1.json",
     ],
     "🇮🇹 Serie A": [
-        "https://raw.githubusercontent.com/openfootball/italy-football/master/2025-26/1-seriea.json",
-        "https://raw.githubusercontent.com/openfootball/italy-football/master/2024-25/1-seriea.json",
+        "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/it.1.json",
+        "https://raw.githubusercontent.com/openfootball/football.json/master/2025-26/it.1.json",
     ],
 }
 
@@ -62,15 +61,20 @@ def obtener_estructura_equipo():
 
 
 def sincronizar_con_fuentes_abiertas(db_data):
-  """Intenta descargar los datos desde múltiples URLs de respaldo automáticas."""
+  """Descarga los datos desde los archivos JSON consolidados."""
   hubo_actualizacion = False
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      )
+  }
 
   for liga_nombre, urls in OPEN_SOURCES.items():
     data_exito = None
 
     for url in urls:
       try:
-        res = requests.get(url, timeout=5)
+        res = requests.get(url, headers=headers, timeout=8)
         if res.status_code == 200:
           data_exito = res.json()
           break
@@ -93,8 +97,7 @@ def sincronizar_con_fuentes_abiertas(db_data):
         if not score or "ft" not in score:
           continue
 
-        team1 = m.get("team1")
-        team2 = m.get("team2")
+        team1, team2 = m.get("team1"), m.get("team2")
         gl, gv = score["ft"][0], score["ft"][1]
 
         for eq in [team1, team2]:
@@ -422,9 +425,7 @@ def generar_grafico_macd_y_rsi(historial, equipo, stats_eq=None):
 
 # Interfaz Principal
 st.set_page_config(
-    page_title="Zohan Pronostic v8.0 - Auto Respaldo",
-    page_icon="⚽",
-    layout="wide",
+    page_title="Zohan Pronostic v8.0 - JSON Hub", page_icon="⚽", layout="wide"
 )
 
 st.markdown(
@@ -456,16 +457,16 @@ liga_sel = st.sidebar.selectbox(
 datos_liga = db[liga_sel]
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("⚡ Sincronización Automática Libre")
+st.sidebar.subheader("⚡ Sincronización Automática")
 if st.sidebar.button("🔄 Actualizar Tabla Actual", type="primary"):
-  with st.spinner("Descargando posiciones desde los servidores de respaldo..."):
+  with st.spinner("Descargando tablas consolidadas..."):
     db, exito = sincronizar_con_fuentes_abiertas(db)
     if exito:
       guardar_base_datos(db)
       st.sidebar.success("¡Base de datos actualizada con éxito!")
       st.rerun()
     else:
-      st.sidebar.error("No se pudo obtener respuesta de ningún servidor.")
+      st.sidebar.error("No se pudo obtener respuesta del repositorio.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📱 Gestión de Archivo .TXT")
