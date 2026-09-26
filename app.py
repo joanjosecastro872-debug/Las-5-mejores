@@ -10,10 +10,10 @@ import streamlit as st
 
 DB_FILE = "zohan_pronostic_db.json"
 
-# Token de Football-Data.org
-FOOTBALL_DATA_TOKEN = "9c49e385dc2044439975c26190b17ed9".strip()
+# Token autenticado y activo de Football-Data.org
+FOOTBALL_DATA_TOKEN = "9c49e385dc2044439975c26190b17ed9"
 
-# Mapeo de ligas con códigos oficiales de Football-Data.org
+# Mapeo de ligas permitidas en la cuenta gratuita
 LEAGUES_FOOTBALL_DATA = {
     "🇪🇸 LaLiga": "PD",
     "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "PL",
@@ -55,7 +55,7 @@ def obtener_estructura_equipo():
 
 
 def realizar_peticion_football_data(league_code):
-  """Consulta las posiciones oficiales en Football-Data.org enviando el token verificado."""
+  """Consulta la tabla oficial de Football-Data.org."""
   url = f"https://api.football-data.org/v4/competitions/{league_code}/standings"
   headers = {"X-Auth-Token": FOOTBALL_DATA_TOKEN}
 
@@ -78,7 +78,7 @@ def realizar_peticion_football_data(league_code):
 
 
 def sincronizar_con_football_data(db_data):
-  """Sincroniza la base de datos local con Football-Data.org."""
+  """Sincroniza la base de datos local procesando las posiciones reales."""
   hubo_actualizacion = False
 
   for liga_nombre, league_code in LEAGUES_FOOTBALL_DATA.items():
@@ -109,7 +109,7 @@ def sincronizar_con_football_data(db_data):
       dg = item["goalDifference"]
       pts = item["points"]
 
-      # Desglose estimado para métricas de Local y Visitante
+      # Estimación proporcional para rendimiento Local/Visitante
       pj_l = max(1, pj // 2)
       pg_l, pe_l, pp_l = pg // 2, pe // 2, pp // 2
       gf_l, gc_l = gf // 2, gc // 2
@@ -149,13 +149,14 @@ def sincronizar_con_football_data(db_data):
       db_data[liga_nombre]["tabla"] = tabla_liga
       hubo_actualizacion = True
 
+    # Tiempo de espera para cumplir con el límite gratuito (10 peticiones/min)
     time.sleep(1)
 
   return db_data, hubo_actualizacion
 
 
 def cargar_base_datos():
-  """Carga la base de datos local JSON asegurando la estructura completa de equipos."""
+  """Carga el JSON local asegurando la estructura de métricas de equipos."""
   data = {}
   if os.path.exists(DB_FILE):
     try:
@@ -182,13 +183,13 @@ def cargar_base_datos():
 
 
 def guardar_base_datos(data):
-  """Guarda el objeto en el archivo JSON local."""
+  """Guarda los cambios en el archivo JSON."""
   with open(DB_FILE, "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False, indent=4)
 
 
 def calcular_elo_snapshot(stats_eq):
-  """Calcula la puntuación Elo acumulada de un equipo."""
+  """Calcula la puntuación Elo acumulada."""
   pj = max(1, stats_eq.get("PJ", 1))
   pts = stats_eq.get("Pts", 0)
   dg = stats_eq.get("DG", 0)
@@ -198,7 +199,7 @@ def calcular_elo_snapshot(stats_eq):
 
 
 def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
-  """Aplica los cambios de un marcador manual a la tabla de posiciones."""
+  """Aplica los cambios de un marcador registrado a la tabla de posiciones."""
   factor = -1 if revertir else 1
   if gl > gv:
     pts_l, pts_v = 3, 0
@@ -237,7 +238,7 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
 
 
 def calcular_fibonacci_y_tendencia(stats_eq, equipo):
-  """Evalúa la eficiencia bajo la curva de Fibonacci."""
+  """Evalúa la posición del equipo dentro de la curva de Fibonacci."""
   pj = max(1, stats_eq["PJ"])
   pts = stats_eq["Pts"]
   eficiencia = round((pts / (pj * 3)) * 100, 1) if pj > 0 else 0.0
@@ -274,7 +275,7 @@ def calcular_fibonacci_y_tendencia(stats_eq, equipo):
 
 
 def analizar_racha_automatica(historial, equipo):
-  """Analiza la tendencia de los últimos partidos del equipo."""
+  """Analiza la tendencia reciente a partir del historial."""
   partidos_equipo = []
   for m in reversed(historial):
     if m["local"] == equipo or m["visitante"] == equipo:
@@ -307,7 +308,7 @@ def analizar_racha_automatica(historial, equipo):
 
 
 def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
-  """Ejecuta simulación de probabilidades mediante Poisson y Monte Carlo."""
+  """Realiza simulaciones de Monte Carlo con distribución de Poisson."""
   goles_l = np.random.poisson(lambda_l, n_simulaciones)
   goles_v = np.random.poisson(lambda_v, n_simulaciones)
   wins_l = np.sum(goles_l > goles_v)
@@ -320,7 +321,7 @@ def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
 
 
 def calcular_top_marcadores_exactos(lambda_l, lambda_v, top_n=5):
-  """Calcula la matriz de probabilidades de marcadores exactos."""
+  """Genera el Top de marcadores probables."""
   goles_max = 6
   pmf_l = poisson.pmf(np.arange(goles_max), lambda_l)
   pmf_v = poisson.pmf(np.arange(goles_max), lambda_v)
@@ -342,7 +343,7 @@ def calcular_top_marcadores_exactos(lambda_l, lambda_v, top_n=5):
 
 
 def generar_grafico_macd_y_rsi(historial, equipo, stats_eq=None):
-  """Genera el gráfico técnico de MACD y RSI."""
+  """Grafica los osciladores MACD y RSI."""
   puntos_partidos = []
   for m in historial:
     if m["local"] == equipo or m["visitante"] == equipo:
@@ -428,7 +429,7 @@ def generar_grafico_macd_y_rsi(historial, equipo, stats_eq=None):
   st.pyplot(fig)
 
 
-# Configuración e Interfaz Principal
+# Configuración e Interfaz Principal de Streamlit
 st.set_page_config(
     page_title="Zohan Pronostic v8.0 - Football-Data",
     page_icon="⚽",
@@ -456,7 +457,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Inicialización de Base de Datos
 db = cargar_base_datos()
 
 liga_sel = st.sidebar.selectbox(
@@ -476,7 +476,7 @@ if st.sidebar.button("🔄 Actualizar Tabla Actual", type="primary"):
       st.sidebar.success("¡Tabla de la temporada actual descargada!")
       st.rerun()
     else:
-      st.sidebar.error("No se obtuvieron datos. Verifica los detalles arriba.")
+      st.sidebar.error("No se obtuvieron datos. Revisa la consola o alertas.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📱 Gestión de Archivo .TXT")
@@ -502,7 +502,7 @@ if archivo_subido is not None:
   except Exception:
     st.sidebar.error("Archivo .txt inválido.")
 
-# Renderizado de Pestañas
+# Secciones de la Aplicación
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Tabla & Elo",
     "⚙️ Carga Directa",
