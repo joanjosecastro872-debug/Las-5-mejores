@@ -13,7 +13,7 @@ DB_FILE = "zohan_pronostic_db.json"
 # Token autenticado de Football-Data.org
 FOOTBALL_DATA_TOKEN = "9c49e385dc2044439975c26190b17ed9"
 
-# Mapeo de ligas con códigos oficiales de Football-Data.org (Temporada actual gratuita)
+# Mapeo de ligas con códigos oficiales de Football-Data.org
 LEAGUES_FOOTBALL_DATA = {
     "🇪🇸 LaLiga": "PD",
     "🏴󠁧󠁢󠁥󠁮󠁧󠁿 Premier League": "PL",
@@ -28,22 +28,52 @@ HEADERS_FOOTBALL_DATA = {
 }
 
 
+def obtener_estructura_equipo():
+  """Retorna la estructura base de métricas para un equipo."""
+  return {
+      "PJ": 0,
+      "PG": 0,
+      "PE": 0,
+      "PP": 0,
+      "GF": 0,
+      "GC": 0,
+      "DG": 0,
+      "Pts": 0,
+      "PJ_L": 0,
+      "PG_L": 0,
+      "PE_L": 0,
+      "PP_L": 0,
+      "GF_L": 0,
+      "GC_L": 0,
+      "DG_L": 0,
+      "Pts_L": 0,
+      "PJ_V": 0,
+      "PG_V": 0,
+      "PE_V": 0,
+      "PP_V": 0,
+      "GF_V": 0,
+      "GC_V": 0,
+      "DG_V": 0,
+      "Pts_V": 0,
+  }
+
+
 def realizar_peticion_football_data(league_code):
-  """Consulta la tabla oficial de Football-Data.org especificando la temporada activa."""
-  # En Football-Data.org las temporadas europeas en curso se consultan con el año de inicio (2025)
-  url = f"https://api.football-data.org/v4/competitions/{league_code}/standings?season=2025"
+  """Consulta la tabla de posiciones oficial de Football-Data.org."""
+  url = f"https://api.football-data.org/v4/competitions/{league_code}/standings"
 
   try:
     response = requests.get(url, headers=HEADERS_FOOTBALL_DATA, timeout=10)
     if response.status_code == 200:
       return response.json()
     else:
-      # Muestra el detalle exacto del error que devuelve la API para diagnóstico
       try:
         err_msg = response.json().get("message", response.text)
       except Exception:
         err_msg = response.text
-      st.sidebar.error(f"Error {response.status_code} [{league_code}]: {err_msg}")
+      st.sidebar.error(
+          f"Error HTTP {response.status_code} [{league_code}]: {err_msg}"
+      )
       return None
   except Exception as e:
     st.sidebar.error(f"Error de conexión de red: {e}")
@@ -51,7 +81,7 @@ def realizar_peticion_football_data(league_code):
 
 
 def sincronizar_con_football_data(db_data):
-  """Sincroniza la base de datos procesando la respuesta oficial."""
+  """Sincroniza la base de datos local con Football-Data.org."""
   hubo_actualizacion = False
 
   for liga_nombre, league_code in LEAGUES_FOOTBALL_DATA.items():
@@ -82,7 +112,7 @@ def sincronizar_con_football_data(db_data):
       dg = item["goalDifference"]
       pts = item["points"]
 
-      # Métricas proporcionales para el desglose Local/Visitante
+      # Desglose estimado para métricas de Local y Visitante
       pj_l = max(1, pj // 2)
       pg_l, pe_l, pp_l = pg // 2, pe // 2, pp // 2
       gf_l, gc_l = gf // 2, gc // 2
@@ -127,8 +157,8 @@ def sincronizar_con_football_data(db_data):
   return db_data, hubo_actualizacion
 
 
-
 def cargar_base_datos():
+  """Carga la base de datos local JSON asegurando la estructura completa de equipos."""
   data = {}
   if os.path.exists(DB_FILE):
     try:
@@ -155,11 +185,13 @@ def cargar_base_datos():
 
 
 def guardar_base_datos(data):
+  """Guarda el objeto en el archivo JSON local."""
   with open(DB_FILE, "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False, indent=4)
 
 
 def calcular_elo_snapshot(stats_eq):
+  """Calcula la puntuación Elo acumulada de un equipo."""
   pj = max(1, stats_eq.get("PJ", 1))
   pts = stats_eq.get("Pts", 0)
   dg = stats_eq.get("DG", 0)
@@ -169,6 +201,7 @@ def calcular_elo_snapshot(stats_eq):
 
 
 def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
+  """Aplica los cambios de un marcador manual a la tabla de posiciones."""
   factor = -1 if revertir else 1
   if gl > gv:
     pts_l, pts_v = 3, 0
@@ -207,6 +240,7 @@ def aplicar_partido_a_tabla(tabla, local, visitante, gl, gv, revertir=False):
 
 
 def calcular_fibonacci_y_tendencia(stats_eq, equipo):
+  """Evalúa la eficiencia bajo la curva de Fibonacci."""
   pj = max(1, stats_eq["PJ"])
   pts = stats_eq["Pts"]
   eficiencia = round((pts / (pj * 3)) * 100, 1) if pj > 0 else 0.0
@@ -243,6 +277,7 @@ def calcular_fibonacci_y_tendencia(stats_eq, equipo):
 
 
 def analizar_racha_automatica(historial, equipo):
+  """Analiza la tendencia de los últimos partidos del equipo."""
   partidos_equipo = []
   for m in reversed(historial):
     if m["local"] == equipo or m["visitante"] == equipo:
@@ -275,6 +310,7 @@ def analizar_racha_automatica(historial, equipo):
 
 
 def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
+  """Ejecuta simulación de probabilidades mediante Poisson y Monte Carlo."""
   goles_l = np.random.poisson(lambda_l, n_simulaciones)
   goles_v = np.random.poisson(lambda_v, n_simulaciones)
   wins_l = np.sum(goles_l > goles_v)
@@ -287,6 +323,7 @@ def simular_monte_carlo(lambda_l, lambda_v, n_simulaciones=10000):
 
 
 def calcular_top_marcadores_exactos(lambda_l, lambda_v, top_n=5):
+  """Calcula la matriz de probabilidades de marcadores exactos."""
   goles_max = 6
   pmf_l = poisson.pmf(np.arange(goles_max), lambda_l)
   pmf_v = poisson.pmf(np.arange(goles_max), lambda_v)
@@ -308,6 +345,7 @@ def calcular_top_marcadores_exactos(lambda_l, lambda_v, top_n=5):
 
 
 def generar_grafico_macd_y_rsi(historial, equipo, stats_eq=None):
+  """Genera el gráfico técnico de MACD y RSI."""
   puntos_partidos = []
   for m in historial:
     if m["local"] == equipo or m["visitante"] == equipo:
@@ -421,6 +459,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Inicialización de Base de Datos
 db = cargar_base_datos()
 
 liga_sel = st.sidebar.selectbox(
@@ -433,14 +472,14 @@ datos_liga = db[liga_sel]
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚡ Sincronización Football-Data")
 if st.sidebar.button("🔄 Actualizar Tabla Actual", type="primary"):
-  with st.spinner("Descargando tablas oficiales de la temporada actual..."):
+  with st.spinner("Descargando tablas oficiales en vivo..."):
     db, exito = sincronizar_con_football_data(db)
     if exito:
       guardar_base_datos(db)
       st.sidebar.success("¡Tabla de la temporada actual descargada!")
       st.rerun()
     else:
-      st.sidebar.error("No se obtuvieron datos. Verifica la conexión.")
+      st.sidebar.error("No se obtuvieron datos. Verifica los detalles arriba.")
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("📱 Gestión de Archivo .TXT")
@@ -466,6 +505,7 @@ if archivo_subido is not None:
   except Exception:
     st.sidebar.error("Archivo .txt inválido.")
 
+# Renderizado de Pestañas
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Tabla & Elo",
     "⚙️ Carga Directa",
