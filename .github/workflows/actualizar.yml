@@ -28,6 +28,11 @@ jobs:
           git config --global user.name "Bot Automatico"
           git config --global user.email "bot@actions.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git add -A
-          git commit -m "Actualizacion automatica [skip ci]" || echo "Sin cambios"
-          git push origin HEAD
+          
+          if [ -f zohan_pronostic_db.json ]; then
+            git add zohan_pronostic_db.json
+            git commit -m "Actualizacion automatica [skip ci]" || echo "Sin cambios"
+            git push origin HEAD
+          else
+            echo "⚠️ El archivo zohan_pronostic_db.json no se encontró, omitiendo commit."
+          fi
