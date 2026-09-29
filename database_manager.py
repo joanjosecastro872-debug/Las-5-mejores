@@ -3,6 +3,14 @@ import os
 
 DB_FILE = "zohan_pronostic_db.json"
 
+# Auto-crear el archivo JSON si no existe para evitar errores en GitHub Actions
+if not os.path.exists(DB_FILE):
+  try:
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+      json.dump({}, f, ensure_ascii=False, indent=4)
+  except Exception:
+    pass
+
 LIGAS_EQUIPOS = {
     "🇪🇸 LaLiga": [
         "Athletic Club",
